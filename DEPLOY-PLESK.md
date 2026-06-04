@@ -175,6 +175,16 @@ To receive inbound email into the portal, point your provider's inbound webhook
 https://rowancopy.com/api/email/inbound?secret=YOUR_INBOUND_WEBHOOK_SECRET
 ```
 
+## Optional: daily digest email
+
+The app exposes a digest endpoint that emails active admins a summary of open
+inquiries and due-soon projects. Schedule it with **Plesk → Scheduled Tasks
+(cron)**, e.g. daily at 7am:
+
+```bash
+curl -s "https://rowancopy.com/api/digest?secret=YOUR_INBOUND_WEBHOOK_SECRET" >/dev/null
+```
+
 ## Troubleshooting
 
 - **502 / app won't start** — check Application Root has `package.json`, that
