@@ -1,0 +1,379 @@
+// Rowan Copy — Prisma schema
+//
+// PRODUCTION uses PostgreSQL (provider below). For quick LOCAL dev with SQLite,
+// change `provider` to "sqlite", set DATABASE_URL="file:./dev.db" and run
+// `npm run db:push`. The schema intentionally avoids native enums and uses
+// String fields (with constants enforced in app code) so the SAME schema works
+// on both Postgres and SQLite.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Users & auth
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  phone        String?
+  passwordHash String
+  role         String   @default("CLIENT") // CLIENT | EMPLOYEE | ADMIN
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  projectsAsClient   Project[] @relation("ClientProjects")
+  projectsAsAssignee Project[] @relation("AssigneeProjects")
+
+  projectNotes  ProjectNote[]  @relation("ProjectNoteAuthor")
+  clientNotesAbout ClientNote[] @relation("ClientNoteSubject")
+  clientNotesAuthored ClientNote[] @relation("ClientNoteAuthor")
+  employeeNotesAbout EmployeeNote[] @relation("EmployeeNoteSubject")
+  employeeNotesAuthored EmployeeNote[] @relation("EmployeeNoteAuthor")
+
+  uploadedDocuments Document[] @relation("DocumentUploader")
+  clientDocuments   Document[] @relation("DocumentClient")
+
+  paymentsAsClient Payment[] @relation("PaymentClient")
+
+  sentEmails    EmailLog[]    @relation("EmailSender")
+  announcements Announcement[] @relation("AnnouncementAuthor")
+  monthlyPlan   MonthlyPlan?
+
+  threadParticipations ThreadParticipant[]
+  sentMessages         Message[] @relation("MessageSender")
+
+  brandVoiceProfile BrandVoiceProfile? @relation("BrandVoiceClient")
+
+  quotesAsClient Quote[] @relation("QuoteClient")
+  templates      Template[] @relation("TemplateAuthor")
+  reviewsAsClient Review[] @relation("ReviewClient")
+  auditLogs      AuditLog[] @relation("AuditActor")
+}
+
+// ---------------------------------------------------------------------------
+// Inquiries / quote requests (public contact form + client requests)
+// ---------------------------------------------------------------------------
+
+model Inquiry {
+  id          String   @id @default(cuid())
+  name        String
+  business    String?
+  email       String
+  phone       String?
+  serviceType String   // one of the SERVICE_TYPES, or "Other"
+  budget      String?
+  message     String
+  status      String   @default("New") // New | Reviewed | Converted | Archived
+  source      String   @default("public") // public | client-portal | monthly-plan
+  clientId    String?  // set when submitted by a logged-in client
+  createdAt   DateTime @default(now())
+
+  convertedProjectId String?
+}
+
+// ---------------------------------------------------------------------------
+// Projects (the core "job" object)
+// ---------------------------------------------------------------------------
+
+model Project {
+  id                    String    @id @default(cuid())
+  title                 String
+  type                  String    // SERVICE_TYPES
+  scope                 String    // brief / scope description
+  status                String    @default("Inquiry")
+  quotedPrice           Float?
+  revisionRoundsIncluded Int      @default(1)
+  revisionRoundsUsed    Int       @default(0)
+  dueDate               DateTime?
+  cancelledReason       String?
+  cancelledAt           DateTime?
+
+  clientId   String
+  client     User    @relation("ClientProjects", fields: [clientId], references: [id])
+  assigneeId String?
+  assignee   User?   @relation("AssigneeProjects", fields: [assigneeId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  notes       ProjectNote[]
+  documents   Document[]
+  payments    Payment[]
+  brief       Brief?
+  quote       Quote?
+  reviews     Review[]
+}
+
+model ProjectNote {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation("ProjectNoteAuthor", fields: [authorId], references: [id])
+  body      String
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Internal notes about people (never visible to the subject / clients)
+// ---------------------------------------------------------------------------
+
+model ClientNote {
+  id           String   @id @default(cuid())
+  clientUserId String
+  clientUser   User     @relation("ClientNoteSubject", fields: [clientUserId], references: [id], onDelete: Cascade)
+  authorId     String
+  author       User     @relation("ClientNoteAuthor", fields: [authorId], references: [id])
+  body         String
+  createdAt    DateTime @default(now())
+}
+
+model EmployeeNote {
+  id             String   @id @default(cuid())
+  employeeUserId String
+  employeeUser   User     @relation("EmployeeNoteSubject", fields: [employeeUserId], references: [id], onDelete: Cascade)
+  authorId       String
+  author         User     @relation("EmployeeNoteAuthor", fields: [authorId], references: [id])
+  body           String
+  createdAt      DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Documents / deliverables
+// ---------------------------------------------------------------------------
+
+model Document {
+  id           String   @id @default(cuid())
+  projectId    String?
+  project      Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  clientId     String
+  client       User     @relation("DocumentClient", fields: [clientId], references: [id])
+  uploaderId   String
+  uploader     User     @relation("DocumentUploader", fields: [uploaderId], references: [id])
+  kind         String   @default("deliverable") // deliverable | document
+  originalName String
+  storedName   String
+  mimeType     String
+  size         Int
+  createdAt    DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Payments (manual Stripe links)
+// ---------------------------------------------------------------------------
+
+model Payment {
+  id          String    @id @default(cuid())
+  clientId    String
+  client      User      @relation("PaymentClient", fields: [clientId], references: [id])
+  projectId   String?
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  description String
+  amount      Float?
+  stripeUrl   String
+  status      String    @default("Sent") // Sent | Paid
+  createdAt   DateTime  @default(now())
+  paidAt      DateTime?
+}
+
+// ---------------------------------------------------------------------------
+// Email log + signature
+// ---------------------------------------------------------------------------
+
+model EmailLog {
+  id           String   @id @default(cuid())
+  senderUserId String?
+  sender       User?    @relation("EmailSender", fields: [senderUserId], references: [id])
+  to           String   // comma-separated recipients
+  subject      String
+  body         String
+  status       String   @default("sent") // sent | logged | failed
+  direction    String   @default("outbound") // outbound | inbound
+  createdAt    DateTime @default(now())
+}
+
+model Signature {
+  id        String   @id @default(cuid())
+  text      String
+  html      String
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Announcements
+// ---------------------------------------------------------------------------
+
+model Announcement {
+  id        String   @id @default(cuid())
+  authorId  String
+  author    User     @relation("AnnouncementAuthor", fields: [authorId], references: [id])
+  title     String
+  body      String
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Monthly plan ($30/mo hosting + upkeep)
+// ---------------------------------------------------------------------------
+
+model MonthlyPlan {
+  id          String    @id @default(cuid())
+  clientId    String    @unique
+  client      User      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  active      Boolean   @default(true)
+  renewalDate DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Messaging
+// ---------------------------------------------------------------------------
+
+model Thread {
+  id        String   @id @default(cuid())
+  subject   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ThreadParticipant[]
+  messages     Message[]
+}
+
+model ThreadParticipant {
+  id         String    @id @default(cuid())
+  threadId   String
+  thread     Thread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt DateTime?
+
+  @@unique([threadId, userId])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  threadId  String
+  thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderId  String?
+  sender    User?    @relation("MessageSender", fields: [senderId], references: [id])
+  body      String
+  createdAt DateTime @default(now())
+}
+
+// Inbound emails that couldn't be matched to a user -> admin "Unmatched Inbox"
+model InboundEmail {
+  id        String   @id @default(cuid())
+  fromEmail String
+  subject   String
+  body      String
+  matched   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Smart additions
+// ---------------------------------------------------------------------------
+
+model Brief {
+  id          String   @id @default(cuid())
+  projectId   String   @unique
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  audience    String?
+  goal        String?
+  tone        String?
+  avoid       String?  // words/phrases to avoid
+  competitors String?
+  mustInclude String?
+  links       String?
+  submittedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model BrandVoiceProfile {
+  id           String   @id @default(cuid())
+  clientId     String   @unique
+  client       User     @relation("BrandVoiceClient", fields: [clientId], references: [id], onDelete: Cascade)
+  tone         String?
+  bannedCliches String?
+  keyTerms     String?
+  notes        String?
+  updatedAt    DateTime @updatedAt
+}
+
+model Quote {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    User     @relation("QuoteClient", fields: [clientId], references: [id])
+  projectId String?  @unique
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  inquiryId String?
+  title     String
+  notes     String?
+  status    String   @default("Draft") // Draft | Sent | Accepted | Declined
+  sentAt    DateTime?
+  acceptedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lineItems QuoteLineItem[]
+}
+
+model QuoteLineItem {
+  id        String  @id @default(cuid())
+  quoteId   String
+  quote     Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  label     String
+  quantity  Int     @default(1)
+  unitPrice Float   @default(0)
+}
+
+model Template {
+  id        String   @id @default(cuid())
+  authorId  String?
+  author    User?    @relation("TemplateAuthor", fields: [authorId], references: [id])
+  category  String   // caption | email | policy | website | other
+  title     String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  clientId   String?
+  client     User?    @relation("ReviewClient", fields: [clientId], references: [id])
+  projectId  String?
+  project    Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  authorName String
+  business   String?
+  rating     Int?
+  body       String?
+  status     String   @default("Requested") // Requested | Submitted | Featured
+  featured   Boolean  @default(false)
+  token      String?  @unique
+  createdAt  DateTime @default(now())
+  submittedAt DateTime?
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id])
+  action     String   // create | update | delete | login | etc.
+  entityType String
+  entityId   String?
+  summary    String
+  createdAt  DateTime @default(now())
+}

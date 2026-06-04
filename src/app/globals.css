@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-white text-navy-700 antialiased;
+    font-feature-settings: "kern";
+  }
+  h1, h2, h3, h4 {
+    @apply font-heading text-navy;
+    letter-spacing: -0.01em;
+  }
+  a {
+    @apply transition-colors;
+  }
+  /* Visible focus ring for keyboard users */
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent ring-offset-2;
+  }
+}
+
+@layer components {
+  .container-x {
+    @apply mx-auto w-full max-w-6xl px-5 sm:px-8;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-all focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-white shadow-soft hover:bg-accent-hover focus-visible:ring-accent;
+  }
+  .btn-navy {
+    @apply btn bg-navy text-white hover:bg-navy-600 focus-visible:ring-navy;
+  }
+  .btn-outline {
+    @apply btn border border-navy-200 bg-white text-navy hover:border-navy-300 hover:bg-navy-50 focus-visible:ring-navy;
+  }
+  .btn-ghost {
+    @apply btn text-navy-600 hover:bg-navy-50;
+  }
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500;
+  }
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+  .card {
+    @apply rounded-2xl border border-navy-100 bg-white shadow-card;
+  }
+  .input {
+    @apply w-full rounded-xl border border-navy-200 bg-white px-3.5 py-2.5 text-sm text-navy-700 shadow-soft placeholder:text-navy-300 focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-200;
+  }
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-navy-700;
+  }
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+  .link {
+    @apply font-medium text-accent-hover underline-offset-2 hover:underline;
+  }
+  .prose-narrow p {
+    @apply mb-4 leading-relaxed text-navy-600;
+  }
+}
+
+/* Skip link */
+.skip-link {
+  @apply absolute left-4 top-4 z-[100] -translate-y-20 rounded-lg bg-navy px-4 py-2 text-white transition-transform focus:translate-y-0;
+}
