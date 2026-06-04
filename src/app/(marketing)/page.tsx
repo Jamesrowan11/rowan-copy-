@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { SERVICES, COMPANY } from "@/lib/constants";
+import { prisma } from "@/lib/prisma";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const featured = await prisma.review.findMany({
+    where: { featured: true, body: { not: null } },
+    orderBy: { submittedAt: "desc" },
+    take: 2,
+  });
   return (
     <>
       {/* Hero */}
@@ -131,20 +137,41 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Testimonial slot (placeholder) */}
+      {/* Testimonials — featured reviews, or a placeholder until supplied */}
       <section className="container-x py-16 md:py-20">
-        <figure className="mx-auto max-w-3xl rounded-2xl border border-dashed border-navy-200 bg-navy-50/40 p-10 text-center">
-          <p className="text-xs font-semibold uppercase tracking-wide text-navy-400">
-            [Placeholder — testimonial to be supplied]
-          </p>
-          <blockquote className="mt-4 font-heading text-2xl font-500 leading-snug text-navy">
-            &ldquo;A short, specific quote from a happy client goes here — what
-            they needed, what they got, and why it mattered.&rdquo;
-          </blockquote>
-          <figcaption className="mt-4 text-sm text-navy-500">
-            First Last — Business Name, Maryland
-          </figcaption>
-        </figure>
+        {featured.length > 0 ? (
+          <div className="mx-auto grid max-w-4xl gap-6 md:grid-cols-2">
+            {featured.map((r) => (
+              <figure key={r.id} className="card p-8">
+                {r.rating ? (
+                  <p className="text-accent" aria-label={`${r.rating} out of 5 stars`}>
+                    {"★".repeat(r.rating)}
+                  </p>
+                ) : null}
+                <blockquote className="mt-3 font-heading text-xl font-500 leading-snug text-navy">
+                  &ldquo;{r.body}&rdquo;
+                </blockquote>
+                <figcaption className="mt-4 text-sm text-navy-500">
+                  {r.authorName}
+                  {r.business ? ` — ${r.business}` : ""}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        ) : (
+          <figure className="mx-auto max-w-3xl rounded-2xl border border-dashed border-navy-200 bg-navy-50/40 p-10 text-center">
+            <p className="text-xs font-semibold uppercase tracking-wide text-navy-400">
+              [Placeholder — testimonial to be supplied]
+            </p>
+            <blockquote className="mt-4 font-heading text-2xl font-500 leading-snug text-navy">
+              &ldquo;A short, specific quote from a happy client goes here — what
+              they needed, what they got, and why it mattered.&rdquo;
+            </blockquote>
+            <figcaption className="mt-4 text-sm text-navy-500">
+              First Last — Business Name, Maryland
+            </figcaption>
+          </figure>
+        )}
       </section>
 
       {/* Closing CTA */}
