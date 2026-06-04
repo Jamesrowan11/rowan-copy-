@@ -10,6 +10,7 @@ import {
 } from "@/components/portal/ui";
 import { ActionForm } from "@/components/portal/ActionForm";
 import { RevisionControls } from "./RevisionControls";
+import { QuoteAccept } from "./QuoteAccept";
 import { saveClientBrief } from "../../actions";
 
 export default async function ClientProjectDetail({
@@ -25,6 +26,7 @@ export default async function ClientProjectDetail({
     include: {
       brief: true,
       assignee: true,
+      quote: { include: { lineItems: true } },
       documents: { orderBy: { createdAt: "desc" } },
       payments: { orderBy: { createdAt: "desc" } },
     },
@@ -61,6 +63,20 @@ export default async function ClientProjectDetail({
               <div><dt className="text-navy-400">Price</dt><dd className="text-navy-700"><Money value={project.quotedPrice} /></dd></div>
             </dl>
           </section>
+
+          {project.quote && project.quote.status !== "Draft" && (
+            <QuoteAccept
+              quote={{
+                id: project.quote.id,
+                title: project.quote.title,
+                status: project.quote.status,
+                notes: project.quote.notes,
+                lineItems: project.quote.lineItems.map((li) => ({
+                  id: li.id, label: li.label, quantity: li.quantity, unitPrice: li.unitPrice,
+                })),
+              }}
+            />
+          )}
 
           {canReview && (
             <section className="card border-accent/40 p-5">

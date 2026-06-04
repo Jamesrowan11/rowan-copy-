@@ -131,6 +131,38 @@ export async function approveDraft(projectId: string): Promise<Result> {
   return { ok: true };
 }
 
+// Accept a quote/proposal in-portal, which advances the project status.
+export async function acceptQuote(quoteId: string): Promise<Result> {
+  const me = await requireRoleAction("CLIENT");
+  const quote = await prisma.quote.findUnique({
+    where: { id: quoteId },
+    include: { project: true },
+  });
+  // Server-side ownership check.
+  if (!quote || quote.clientId !== me.id) return { ok: false, error: "Not found." };
+  if (quote.status !== "Sent") return { ok: false, error: "This quote can't be accepted." };
+  await prisma.quote.update({
+    where: { id: quoteId },
+    data: { status: "Accepted", acceptedAt: new Date() },
+  });
+  if (quote.projectId) {
+    await prisma.project.update({
+      where: { id: quote.projectId },
+      data: { status: "Accepted" },
+    });
+  }
+  await audit({
+    actorId: me.id,
+    action: "update",
+    entityType: "Quote",
+    entityId: quoteId,
+    summary: `Client ${me.name} accepted quote "${quote.title}"`,
+  });
+  if (quote.projectId) revalidatePath(`/client/projects/${quote.projectId}`);
+  revalidatePath("/client");
+  return { ok: true };
+}
+
 // Request changes on a delivered draft.
 export async function requestRevision(
   _prev: Result,

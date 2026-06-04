@@ -15,6 +15,7 @@ import { ConfirmButton } from "@/components/portal/ConfirmButton";
 import { DocumentUpload } from "@/components/portal/DocumentUpload";
 import { PaymentForm } from "@/components/portal/PaymentForm";
 import { StatusControl } from "./StatusControl";
+import { QuotePanel } from "./QuotePanel";
 import {
   updateProjectDetails,
   addProjectNote,
@@ -226,20 +227,18 @@ export default async function AdminProjectDetail({
             </section>
           )}
 
-          {project.quote && (
-            <section className="card p-5">
-              <h2 className="mb-2 text-lg font-600 text-navy">Quote</h2>
-              <div className="mb-2"><StatusBadge status={project.quote.status} /></div>
-              <ul className="space-y-1 text-sm">
-                {project.quote.lineItems.map((li) => (
-                  <li key={li.id} className="flex justify-between">
-                    <span className="text-navy-600">{li.label} × {li.quantity}</span>
-                    <span className="text-navy-700"><Money value={li.unitPrice * li.quantity} /></span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+          <QuotePanel
+            projectId={project.id}
+            quote={project.quote ? {
+              id: project.quote.id,
+              title: project.quote.title,
+              status: project.quote.status,
+              notes: project.quote.notes,
+              lineItems: project.quote.lineItems.map((li) => ({
+                id: li.id, label: li.label, quantity: li.quantity, unitPrice: li.unitPrice,
+              })),
+            } : null}
+          />
 
           {/* Documents */}
           <section className="card p-5">

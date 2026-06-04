@@ -911,6 +911,119 @@ export async function deleteReview(id: string): Promise<Result> {
 }
 
 // --------------------------------------------------------------------------
+// Quotes / proposals
+// --------------------------------------------------------------------------
+
+export async function createQuote(
+  _prev: Result,
+  formData: FormData,
+): Promise<Result> {
+  const admin = await requireRoleAction("ADMIN");
+  const projectId = String(formData.get("projectId") || "");
+  const title = String(formData.get("title") || "").trim();
+  const notes = String(formData.get("notes") || "").trim();
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) return fail("Project not found.");
+  const existing = await prisma.quote.findUnique({ where: { projectId } });
+  if (existing) return fail("This project already has a quote.");
+  await prisma.quote.create({
+    data: {
+      clientId: project.clientId,
+      projectId,
+      title: title || `Quote for ${project.title}`,
+      notes: notes || null,
+      status: "Draft",
+    },
+  });
+  await audit({
+    actorId: admin.id,
+    action: "create",
+    entityType: "Quote",
+    entityId: projectId,
+    summary: `Created quote for "${project.title}"`,
+  });
+  revalidatePath(`/admin/projects/${projectId}`);
+  return OK;
+}
+
+export async function addQuoteLineItem(
+  _prev: Result,
+  formData: FormData,
+): Promise<Result> {
+  await requireRoleAction("ADMIN");
+  const quoteId = String(formData.get("quoteId") || "");
+  const projectId = String(formData.get("projectId") || "");
+  const label = String(formData.get("label") || "").trim();
+  const quantity = Math.max(1, parseInt(String(formData.get("quantity") || "1"), 10) || 1);
+  const unitPrice = Number(formData.get("unitPrice") || 0);
+  if (!label) return fail("Add a label.");
+  const quote = await prisma.quote.findUnique({ where: { id: quoteId } });
+  if (!quote) return fail("Quote not found.");
+  await prisma.quoteLineItem.create({
+    data: { quoteId, label, quantity, unitPrice: isNaN(unitPrice) ? 0 : unitPrice },
+  });
+  revalidatePath(`/admin/projects/${projectId}`);
+  return OK;
+}
+
+export async function deleteQuoteLineItem(id: string): Promise<Result> {
+  await requireRoleAction("ADMIN");
+  const li = await prisma.quoteLineItem.findUnique({
+    where: { id },
+    include: { quote: true },
+  });
+  if (!li) return fail("Line item not found.");
+  await prisma.quoteLineItem.delete({ where: { id } });
+  if (li.quote.projectId) revalidatePath(`/admin/projects/${li.quote.projectId}`);
+  return OK;
+}
+
+export async function sendQuote(quoteId: string): Promise<Result> {
+  const admin = await requireRoleAction("ADMIN");
+  const quote = await prisma.quote.findUnique({
+    where: { id: quoteId },
+    include: { client: true, project: true, lineItems: true },
+  });
+  if (!quote) return fail("Quote not found.");
+  if (quote.lineItems.length === 0) return fail("Add at least one line item first.");
+  await prisma.quote.update({
+    where: { id: quoteId },
+    data: { status: "Sent", sentAt: new Date() },
+  });
+  if (quote.projectId) {
+    await prisma.project.update({
+      where: { id: quote.projectId },
+      data: { status: "Quote Sent" },
+    });
+  }
+  const total = quote.lineItems.reduce((s, li) => s + li.unitPrice * li.quantity, 0);
+  await sendEmail({
+    to: [quote.client.email],
+    subject: `Your quote from Rowan Copy: ${quote.title}`,
+    text: `Hi ${quote.client.name},\n\nHere's your quote for "${quote.title}" — total $${total.toLocaleString()}. You can review and accept it in your portal:\n\n${appUrl}/client${quote.projectId ? `/projects/${quote.projectId}` : ""}\n\nThanks!`,
+    senderUserId: admin.id,
+  });
+  await audit({
+    actorId: admin.id,
+    action: "update",
+    entityType: "Quote",
+    entityId: quoteId,
+    summary: `Sent quote "${quote.title}" to ${quote.client.name}`,
+  });
+  if (quote.projectId) revalidatePath(`/admin/projects/${quote.projectId}`);
+  return OK;
+}
+
+export async function deleteQuote(quoteId: string): Promise<Result> {
+  await requireRoleAction("ADMIN");
+  const quote = await prisma.quote.findUnique({ where: { id: quoteId } });
+  if (!quote) return fail("Quote not found.");
+  await prisma.quote.delete({ where: { id: quoteId } });
+  if (quote.projectId) revalidatePath(`/admin/projects/${quote.projectId}`);
+  return OK;
+}
+
+// --------------------------------------------------------------------------
 // Signature & settings
 // --------------------------------------------------------------------------
 

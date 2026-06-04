@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/authz";
 import { PageHeader, EmptyState, fmtDate } from "@/components/portal/ui";
 import { ActionForm } from "@/components/portal/ActionForm";
 import { ConfirmButton } from "@/components/portal/ConfirmButton";
+import { CountedTextarea } from "@/components/portal/CountedTextarea";
 import { saveTemplate, deleteTemplate } from "../actions";
 import { TEMPLATE_CATEGORIES } from "@/lib/constants";
 
@@ -24,7 +25,7 @@ export default async function AdminTemplatesPage() {
               {TEMPLATE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
             <input name="title" className="input" placeholder="Title" required />
-            <textarea name="body" rows={6} className="input" placeholder="Template body…" required />
+            <CountedTextarea name="body" rows={6} placeholder="Template body…" required />
           </ActionForm>
         </section>
 

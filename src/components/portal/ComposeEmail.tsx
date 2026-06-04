@@ -2,6 +2,7 @@
 
 import { useActionState, useRef, useEffect } from "react";
 import { composeEmail } from "@/server/compose";
+import { CountedTextarea } from "@/components/portal/CountedTextarea";
 import { ROLE_LABELS } from "@/lib/constants";
 
 type Recipient = { id: string; name: string; email: string; role: string };
@@ -68,7 +69,7 @@ export function ComposeEmail({ recipients }: { recipients: Recipient[] }) {
 
       <div>
         <label className="label" htmlFor="body">Message</label>
-        <textarea id="body" name="body" rows={8} className="input" required
+        <CountedTextarea id="body" name="body" rows={8} required
           placeholder="Write your email. The Rowan Copy signature is added automatically." />
       </div>
 
