@@ -1,7 +1,8 @@
 # Deploying Rowan Copy on Vercel (fallback)
 
-Vercel is a quick alternative to Plesk. You'll need a **hosted PostgreSQL**
-database (Vercel Postgres, Neon, Supabase, or RDS) since Vercel is serverless.
+Vercel is a quick alternative to the Windows Server deployment. You'll need a
+**hosted PostgreSQL** database (Vercel Postgres, Neon, Supabase, or RDS) since
+Vercel is serverless.
 
 > Note: `output: 'standalone'` in `next.config.mjs` is ignored by Vercel (it uses
 > its own build target), so no changes are needed.
@@ -82,6 +83,7 @@ SSL is provisioned automatically once DNS resolves.
 - **File uploads:** the local `/uploads` folder is **not persistent** on Vercel's
   serverless filesystem. For production uploads on Vercel, switch
   `src/lib/uploads.ts` and the document download route to a blob/object store
-  (Vercel Blob or S3). Plesk does not have this limitation.
+  (Vercel Blob or S3). A Windows Server with local disk does not have this
+  limitation.
 - Use a pooled connection string (e.g. Neon/Supabase pooler) to avoid exhausting
   Postgres connections from serverless functions.

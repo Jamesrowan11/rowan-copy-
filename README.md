@@ -104,7 +104,7 @@ npm run dev
 | `npm run dev`              | Start the dev server.                               |
 | `npm run build`            | Production build (standalone) + copy static assets. |
 | `npm run start`            | Start the standard production server.               |
-| `npm run start:standalone` | Start via the Plesk/Passenger entry (`server.js`).  |
+| `npm run start:standalone` | Start the standalone server via `server.js` (used in production on Windows/IIS). |
 | `npm run prisma:deploy`    | Apply migrations (`prisma migrate deploy`).         |
 | `npm run prisma:migrate`   | Create + apply a dev migration.                     |
 | `npm run db:push`          | Push the schema without migrations (SQLite dev).    |
@@ -147,5 +147,6 @@ are httpOnly, secure, and sameSite. Deactivated users can't log in.
 
 ## Deployment
 
-- **Plesk (AWS Linux)** — see [`DEPLOY-PLESK.md`](./DEPLOY-PLESK.md).
+- **AWS Windows Server (IIS + PostgreSQL)** — see
+  [`DEPLOY-WINDOWS.md`](./DEPLOY-WINDOWS.md). This is the production target.
 - **Vercel (fallback)** — see [`DEPLOY-VERCEL.md`](./DEPLOY-VERCEL.md).

@@ -31,3 +31,6 @@ npm-debug.log*
 .vercel
 next-env.d.ts
 /coverage
+
+# IIS (generated from web.config.example; may contain machine paths/secrets)
+web.config

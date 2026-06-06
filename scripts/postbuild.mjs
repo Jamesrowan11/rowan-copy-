@@ -1,7 +1,7 @@
 // After `next build` with output: 'standalone', Next produces a self-contained
 // server at .next/standalone/server.js but does NOT copy static assets or the
-// public/ folder into it. This script copies them so the standalone server (and
-// the Plesk/Passenger entry in server.js) can serve everything.
+// public/ folder into it. This script copies them so the standalone server
+// (booted by server.js in production) can serve everything.
 import { cp, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";

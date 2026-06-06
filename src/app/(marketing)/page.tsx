@@ -2,6 +2,10 @@ import Link from "next/link";
 import { SERVICES, COMPANY } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
 
+// Rendered on-demand (it reads live featured reviews), so the production build
+// never needs a database connection.
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
   const featured = await prisma.review.findMany({
     where: { featured: true, body: { not: null } },
