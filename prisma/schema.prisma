@@ -367,6 +367,14 @@ model Review {
   submittedAt DateTime?
 }
 
+// Simple key-value settings (automation toggles, etc.). Missing keys fall back
+// to defaults in app code, so no seeding is required.
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
 model AuditLog {
   id         String   @id @default(cuid())
   actorId    String?

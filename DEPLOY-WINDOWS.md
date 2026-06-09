@@ -190,15 +190,23 @@ Ensure the app pool identity has **Modify** permission on it and include it in
 your backups. For higher durability you can later move uploads to **S3** — only
 `src/lib/uploads.ts` and the document download route need to change.
 
-## Optional: daily digest email
+## Scheduled automations (recommended)
 
-Use **Task Scheduler** to hit the digest endpoint daily, e.g.:
+The app's scheduled automations — due-soon reminders to the team, overdue
+alerts, monthly-plan renewal reminders, and the admin daily digest — all fire
+from one endpoint. Create a **Task Scheduler** job that runs daily (e.g. 7am):
 
 ```powershell
 # Program/script: powershell.exe
 # Arguments:
--Command "Invoke-WebRequest -UseBasicParsing 'https://rowancopy.com/api/digest?secret=YOUR_INBOUND_WEBHOOK_SECRET' | Out-Null"
+-Command "Invoke-WebRequest -UseBasicParsing 'https://rowancopy.com/api/automations/run?secret=YOUR_INBOUND_WEBHOOK_SECRET' | Out-Null"
 ```
+
+Each automation can be toggled in the portal (Admin → Signature & settings →
+Automations), and sends are deduped — running the task more often than daily
+never double-emails anyone. Event automations (inquiry auto-replies, status
+update emails, welcome emails, testimonial requests) fire instantly on their
+own and don't need this job.
 
 ## Optional: inbound email
 

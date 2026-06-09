@@ -102,6 +102,50 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {/* How it works */}
+      <section className="border-y border-navy-100 bg-navy-50/40">
+        <div className="container-x py-16 md:py-20">
+          <div className="mb-10 max-w-xl">
+            <h2 className="text-3xl font-700 text-navy">How it works</h2>
+            <p className="mt-2 text-navy-600">
+              Four steps, no mystery. You always know where your project stands —
+              and the portal keeps you posted automatically.
+            </p>
+          </div>
+          <ol className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              {
+                title: "Tell me what you need",
+                body: "Send the form with a few details. You'll get a confirmation right away and a real reply within a business day.",
+              },
+              {
+                title: "Get a quote & timeline",
+                body: "A firm price and delivery date, accepted with one click in your client portal. No surprises later.",
+              },
+              {
+                title: "I write, you review",
+                body: "Drafts land in your portal the moment they're ready. Approve, or request changes — revision rounds are built into the quote.",
+              },
+              {
+                title: "Delivered, ready to use",
+                body: "Final copy arrives formatted and copy-and-paste ready. It stays in your portal whenever you need it again.",
+              },
+            ].map((step, i) => (
+              <li key={step.title} className="card relative p-6">
+                <span
+                  className="absolute -top-3 left-6 flex h-8 w-8 items-center justify-center rounded-full bg-accent font-heading text-sm font-700 text-white"
+                  aria-hidden
+                >
+                  {i + 1}
+                </span>
+                <h3 className="mt-3 text-lg font-600 text-navy">{step.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-navy-600">{step.body}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
       {/* Why Rowan Copy strip */}
       <section className="bg-navy text-white">
         <div className="container-x py-16 md:py-20">

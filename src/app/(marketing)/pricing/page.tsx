@@ -80,6 +80,49 @@ export default function PricingPage() {
         agreement wording is a plain-language starting point, not legal advice.
         Please confirm anything legally sensitive with your own attorney.
       </div>
+
+      {/* FAQ */}
+      <section className="mt-16 max-w-3xl" aria-labelledby="faq-heading">
+        <h2 id="faq-heading" className="text-2xl font-700 text-navy">
+          Common questions
+        </h2>
+        <div className="mt-6 space-y-3">
+          {[
+            {
+              q: "How fast will I get my copy?",
+              a: "Most single projects come back within a few days. You get a firm delivery date with your quote, and the portal emails you the moment a draft is ready.",
+            },
+            {
+              q: "What if I don't like the first draft?",
+              a: "Revision rounds are included in every quote. Request changes right from the portal and the draft moves back to writing — you'll see exactly how many rounds you have left.",
+            },
+            {
+              q: "How do payments work?",
+              a: "One-time projects are billed up front through a secure Stripe link. The $30/month plan bills monthly and you can cancel anytime. Everything is delivered digitally.",
+            },
+            {
+              q: "Do you work outside Maryland?",
+              a: "Yes. I'm based in Howard County and love working with local businesses, but everything runs remotely just as well — clients are all over the U.S.",
+            },
+            {
+              q: "What do you need from me to start?",
+              a: "Just the contact form to begin. Once we're working together, a short project brief in the portal (audience, goal, tone) makes the first draft dramatically better.",
+            },
+          ].map((item) => (
+            <details key={item.q} className="card group p-5">
+              <summary className="cursor-pointer list-none font-600 text-navy marker:content-none">
+                <span className="flex items-center justify-between gap-3">
+                  {item.q}
+                  <span className="text-navy-300 transition-transform group-open:rotate-45" aria-hidden>
+                    +
+                  </span>
+                </span>
+              </summary>
+              <p className="mt-3 text-sm leading-relaxed text-navy-600">{item.a}</p>
+            </details>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

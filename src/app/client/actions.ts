@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireRoleAction } from "@/lib/authz";
 import { audit } from "@/lib/audit";
 import { sendEmail } from "@/lib/email";
+import { onInquiryCreated } from "@/lib/automations";
 import { SERVICE_TYPES } from "@/lib/constants";
 
 type Result = { ok: boolean; error?: string };
@@ -41,6 +42,8 @@ export async function submitClientInquiry(
     entityId: inquiry.id,
     summary: `Client ${me.name} submitted a new request (${serviceType})`,
   });
+  // Automation: alert the admins (no auto-reply needed — they're in the portal).
+  await onInquiryCreated(inquiry);
   revalidatePath("/client");
   return { ok: true };
 }
@@ -52,7 +55,7 @@ export async function requestMonthlyUpdate(): Promise<Result> {
   if (!plan || !plan.active) {
     return { ok: false, error: "You don't have an active monthly plan." };
   }
-  await prisma.inquiry.create({
+  const inquiry = await prisma.inquiry.create({
     data: {
       name: me.name,
       email: me.email,
@@ -64,6 +67,7 @@ export async function requestMonthlyUpdate(): Promise<Result> {
       clientId: me.id,
     },
   });
+  await onInquiryCreated(inquiry);
   revalidatePath("/client");
   return { ok: true };
 }
@@ -158,6 +162,20 @@ export async function acceptQuote(quoteId: string): Promise<Result> {
     entityId: quoteId,
     summary: `Client ${me.name} accepted quote "${quote.title}"`,
   });
+  // Automation: tell the team the quote was accepted so work can start.
+  const admins = await prisma.user.findMany({
+    where: { role: "ADMIN", active: true },
+    select: { email: true },
+  });
+  if (admins.length) {
+    await sendEmail({
+      to: admins.map((a) => a.email),
+      subject: `Quote accepted: ${quote.title}`,
+      text: `${me.name} just accepted the quote "${quote.title}". The project moved to Accepted — time to schedule the work.\n\n${appUrl}/admin${quote.projectId ? `/projects/${quote.projectId}` : "/projects"}`,
+      senderUserId: me.id,
+      appendSignature: false,
+    });
+  }
   if (quote.projectId) revalidatePath(`/client/projects/${quote.projectId}`);
   revalidatePath("/client");
   return { ok: true };

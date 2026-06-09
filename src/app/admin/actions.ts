@@ -10,6 +10,12 @@ import { saveUpload } from "@/lib/uploads";
 import { sendEmail } from "@/lib/email";
 import { setSignature } from "@/lib/signature";
 import {
+  onClientAccountCreated,
+  onProjectStatusChanged,
+  setAutomationEnabled,
+  type AutomationKey,
+} from "@/lib/automations";
+import {
   PROJECT_STATUSES,
   SERVICE_TYPES,
   ROLES,
@@ -75,6 +81,12 @@ export async function convertInquiry(
         role: "CLIENT",
         passwordHash: await hashPassword(tempPassword),
       },
+    });
+    // Automation: email the new client their portal login.
+    await onClientAccountCreated({
+      name: client.name,
+      email: client.email,
+      tempPassword,
     });
   }
 
@@ -241,6 +253,8 @@ export async function updateProjectStatus(id: string, status: string): Promise<R
     entityId: id,
     summary: `Status → ${status} for "${project.title}"`,
   });
+  // Automations: client status emails, testimonial request on close.
+  await onProjectStatusChanged(id, status);
   revalidatePath(`/admin/projects/${id}`);
   revalidatePath("/admin/projects");
   return OK;
@@ -1041,6 +1055,27 @@ export async function updateSignature(
     action: "update",
     entityType: "Signature",
     summary: "Updated company email signature",
+  });
+  revalidatePath("/admin/settings");
+  return OK;
+}
+
+// --------------------------------------------------------------------------
+// Automations
+// --------------------------------------------------------------------------
+
+export async function toggleAutomation(
+  key: AutomationKey,
+  enabled: boolean,
+): Promise<Result> {
+  const admin = await requireRoleAction("ADMIN");
+  await setAutomationEnabled(key, enabled);
+  await audit({
+    actorId: admin.id,
+    action: "update",
+    entityType: "AppSetting",
+    entityId: key,
+    summary: `${enabled ? "Enabled" : "Disabled"} automation "${key}"`,
   });
   revalidatePath("/admin/settings");
   return OK;

@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
+import { onInquiryCreated } from "@/lib/automations";
 import { SERVICE_TYPES } from "@/lib/constants";
 
 const schema = z.object({
@@ -70,6 +71,9 @@ export async function submitInquiry(
     entityId: inquiry.id,
     summary: `New public inquiry from ${data.name} (${serviceType})`,
   });
+
+  // Automations: confirmation email to the prospect + admin alert.
+  await onInquiryCreated(inquiry);
 
   return { ok: true };
 }

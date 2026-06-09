@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireRoleAction } from "@/lib/authz";
 import { audit } from "@/lib/audit";
+import { onProjectStatusChanged } from "@/lib/automations";
 import { PROJECT_STATUSES } from "@/lib/constants";
 
 type Result = { ok: boolean; error?: string };
@@ -33,6 +34,8 @@ export async function updateProjectStatusStaff(
     entityId: projectId,
     summary: `Status → ${status} for "${project.title}"`,
   });
+  // Automations: client status emails, testimonial request on close.
+  await onProjectStatusChanged(projectId, status);
   revalidatePath(`/staff/projects/${projectId}`);
   revalidatePath("/staff");
   return { ok: true };

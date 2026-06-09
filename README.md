@@ -137,6 +137,26 @@ SEO (title/description, Open Graph, JSON-LD `ProfessionalService`).
   conversations; access enforced server-side (you can only read/post in threads
   you're in). Inbound-email webhook at `POST /api/email/inbound`.
 
+### Automations
+
+The studio runs itself. Every automation is admin-toggleable (Admin →
+Signature & settings → Automations) and on by default:
+
+- **Inquiry auto-reply** — contact-form submitters get an instant confirmation.
+- **New-inquiry alerts** — admins are emailed the moment a request comes in
+  (website, client portal, or monthly-plan update requests).
+- **Project status updates** — clients are emailed automatically when work
+  starts, a draft is delivered, or the project closes.
+- **Client welcome email** — converting an inquiry creates the client account
+  and emails them their portal login.
+- **Quote-accepted alerts** — the team is emailed when a client accepts a quote.
+- **Testimonial on close** — closing a project auto-sends a review request
+  (once per project).
+- **Scheduled run** (`GET /api/automations/run`, cron/Task Scheduler) —
+  due-soon reminders to assignees, overdue alerts to admins, monthly-plan
+  renewal reminders to clients, and the admin daily digest. Sends are deduped,
+  so running it more than daily never double-emails.
+
 ### Security model
 
 All access control is enforced **server-side on the data** — in page loaders,
