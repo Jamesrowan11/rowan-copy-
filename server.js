@@ -1,11 +1,12 @@
 // Startup file for the Next.js standalone server (output: 'standalone').
 //
-// Works on Windows (IIS HttpPlatformHandler, NSSM, PM2, or a plain console) and
-// on Linux. Run it with:  node server.js
+// In production this is run by the Plesk Node.js extension (Phusion Passenger)
+// on Ubuntu — set it as the "Application Startup File". It also works from a
+// plain shell on any OS:  node server.js
 //
 // Port resolution (in priority order):
-//   1. HTTP_PLATFORM_PORT  — set by IIS HttpPlatformHandler
-//   2. PORT                — set by NSSM/PM2/your service or shell
+//   1. PORT                — set by Plesk/Passenger (or your shell/service)
+//   2. HTTP_PLATFORM_PORT  — set by IIS HttpPlatformHandler (if ever used)
 //   3. 3000                — default
 //
 // Make sure you've run `npm run build` first so .next/standalone exists, and
@@ -13,7 +14,7 @@
 const path = require("path");
 const fs = require("fs");
 
-// --- Port: honor IIS HttpPlatformHandler's dynamic port ---------------------
+// --- Port: honor IIS HttpPlatformHandler's dynamic port if PORT isn't set ----
 if (process.env.HTTP_PLATFORM_PORT && !process.env.PORT) {
   process.env.PORT = process.env.HTTP_PLATFORM_PORT;
 }
