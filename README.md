@@ -65,6 +65,7 @@ All are documented in [`.env.example`](./.env.example). The app runs end-to-end
 | `RESEND_API_KEY`         | Used only if `SMTP_HOST` is unset. Otherwise console log.               |
 | `EMAIL_FROM`             | From / reply-to address, e.g. `Rowan Copy <info@rowancopy.com>`.        |
 | `INBOUND_WEBHOOK_SECRET` | Secret for the inbound-email webhook. Open if unset (dev only).         |
+| `MAIL_CRYPTO_SECRET`     | Encrypts stored mailbox passwords (webmail). Falls back to `AUTH_SECRET`. |
 
 ## Demo accounts
 
@@ -132,7 +133,8 @@ SEO (title/description, Open Graph, JSON-LD `ProfessionalService`).
   reviews; unmatched inbox; audit log; CSV export; editable email signature; own
   profile.
 - **Employee** — assigned projects only; update status; project notes; upload
-  drafts; compose email to anyone; messages; templates; own profile.
+  drafts; compose email to anyone; **webmail** (read + send from their own
+  mailbox); messages; templates; own profile.
 - **Client** — own projects (cancelled shown as Cancelled); new requests; intake
   brief; deliverables & payment links; revisions (approve / request changes,
   decrements included rounds); monthly plan; messages with Rowan Copy; own
@@ -140,6 +142,14 @@ SEO (title/description, Open Graph, JSON-LD `ProfessionalService`).
 - **Messaging** — in-app threads with unread badges; admins see all
   conversations; access enforced server-side (you can only read/post in threads
   you're in). Inbound-email webhook at `POST /api/email/inbound`.
+- **Webmail (Mail)** — a full email client in the portal for staff. Each
+  employee connects their own `@rowancopy.com` mailbox (Plesk) — read, search by
+  folder, open with attachments, reply, and compose, sent **as their own
+  address** with **their own signature**. Shared mailboxes (e.g. `info@`) are
+  usable by all staff. The app authenticates per-mailbox over IMAP/SMTP;
+  passwords are stored **encrypted** (AES-256-GCM), and access is enforced on
+  the data (you can only reach mailboxes you own or shared ones). Admins set
+  mailboxes up under **Mailboxes**; owners connect them in **Mail → settings**.
 
 ### Automations
 

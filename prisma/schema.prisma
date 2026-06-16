@@ -58,6 +58,7 @@ model User {
   templates      Template[] @relation("TemplateAuthor")
   reviewsAsClient Review[] @relation("ReviewClient")
   auditLogs      AuditLog[] @relation("AuditActor")
+  mailboxes      Mailbox[]  @relation("MailboxOwner")
 }
 
 // ---------------------------------------------------------------------------
@@ -365,6 +366,36 @@ model Review {
   token      String?  @unique
   createdAt  DateTime @default(now())
   submittedAt DateTime?
+}
+
+// A real email mailbox on the mail server (e.g. Plesk), connected to the portal
+// for sending (SMTP) and reading (IMAP). A mailbox is either owned by one
+// employee/admin or shared (ownerId null, shared = true) like info@rowancopy.com.
+model Mailbox {
+  id            String   @id @default(cuid())
+  address       String   @unique // the email address, e.g. mara@rowancopy.com
+  displayName   String   // From display name, e.g. "Mara Ellis — Rowan Copy"
+  ownerId       String?  // null = shared mailbox
+  owner         User?    @relation("MailboxOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  shared        Boolean  @default(false)
+
+  // Connection settings.
+  imapHost      String
+  imapPort      Int      @default(993)
+  imapSecure    Boolean  @default(true)
+  smtpHost      String
+  smtpPort      Int      @default(587)
+  smtpSecure    Boolean  @default(false)
+  username      String   // login (usually the full email address)
+  passwordEnc   String?  // AES-256-GCM encrypted; null until the owner sets it
+
+  // Per-mailbox signature, appended to messages sent from it.
+  signatureText String?
+  signatureHtml String?
+
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 // Simple key-value settings (automation toggles, etc.). Missing keys fall back

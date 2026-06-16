@@ -24,6 +24,8 @@ async function main() {
   console.log("Seeding Rowan Copy database…");
 
   // --- Clean (dev only) — delete in FK-safe order -------------------------
+  await prisma.mailbox.deleteMany();
+  await prisma.appSetting.deleteMany();
   await prisma.message.deleteMany();
   await prisma.threadParticipant.deleteMany();
   await prisma.thread.deleteMany();
@@ -386,6 +388,32 @@ async function main() {
     },
   });
   void thread;
+
+  // --- Mailboxes (unconfigured — owners add the password in the portal) ---
+  // Demo only: connection settings are placeholders; on a real Plesk server use
+  // the actual mail host and each mailbox's password (set from Mail settings).
+  await prisma.mailbox.create({
+    data: {
+      address: "info@rowancopy.com",
+      displayName: "Rowan Copy",
+      shared: true,
+      imapHost: "rowancopy.com",
+      smtpHost: "rowancopy.com",
+      username: "info@rowancopy.com",
+      signatureText: DEFAULT_SIGNATURE_TEXT,
+    },
+  });
+  await prisma.mailbox.create({
+    data: {
+      address: "mara@rowancopy.com",
+      displayName: "Mara Ellis — Rowan Copy",
+      ownerId: employee.id,
+      imapHost: "rowancopy.com",
+      smtpHost: "rowancopy.com",
+      username: "mara@rowancopy.com",
+      signatureText: "Mara Ellis\nRowan Copy\nmara@rowancopy.com",
+    },
+  });
 
   // --- Sample sent email (EmailLog) --------------------------------------
   await prisma.emailLog.create({

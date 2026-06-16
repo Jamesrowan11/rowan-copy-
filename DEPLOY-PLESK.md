@@ -199,6 +199,31 @@ Verify from the portal: **Admin → Compose email** → send yourself a test. Th
 > set `RESEND_API_KEY` to send via Resend while still **receiving** at the Plesk
 > mailbox — the two are independent.
 
+### 8e. Per-employee webmail in the portal
+
+Beyond the system/automated mail above, **each employee gets a full inbox in the
+portal** — read and send from their own `@rowancopy.com` mailbox (and shared
+ones like `info@`), with their own signature.
+
+1. In Plesk → **Mail**, create each person's mailbox (e.g. `mara@rowancopy.com`)
+   and any shared ones (`info@rowancopy.com`).
+2. (Optional) Set `MAIL_CRYPTO_SECRET` in the Node.js env vars to a long random
+   string. Mailbox passwords are stored encrypted (AES-256-GCM); if you don't
+   set this, the app derives the key from `AUTH_SECRET`. **Don't change this
+   value later** without re-entering every mailbox password.
+3. In the portal as an **admin**: **Mailboxes → Add mailbox** — enter the
+   address, display name, owner (or mark it shared), the mail **host**
+   (usually `rowancopy.com`), and IMAP/SMTP ports (defaults `993` / `587`).
+4. Each **employee** then opens **Mail → settings**, enters their mailbox
+   password (encrypted on save), sets their signature, and clicks **Test
+   connection** to confirm IMAP + SMTP both work.
+
+The app connects to the Plesk mail server over **IMAP (993)** to read and
+**SMTP submission (587)** to send, authenticating as each mailbox — so messages
+are sent authentically as that person and signed by your domain DKIM. Make sure
+the **Security Group** allows the server to reach those ports (loopback if the
+mail server is on the same box, which it is by default in Plesk).
+
 ---
 
 ## 9. Scheduled automations (recommended)

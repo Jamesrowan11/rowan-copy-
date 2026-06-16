@@ -12,6 +12,7 @@ export default async function StaffLayout({
 
   const nav: NavItem[] = [
     { href: "/staff", label: "My projects" },
+    { href: "/staff/mail", label: "Mail" },
     { href: "/staff/messages", label: "Messages", badge: unread || undefined },
     { href: "/staff/emails", label: "Compose email" },
     { href: "/staff/templates", label: "Templates" },
