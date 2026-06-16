@@ -19,8 +19,9 @@ It has two parts:
   local dev
 - **Auth.js / NextAuth v5** with email + password (bcrypt), JWT sessions,
   role-based access
-- Pluggable **email** layer: **Resend** when `RESEND_API_KEY` is set, otherwise
-  emails are logged to the console (the app runs fully with no email key)
+- Pluggable **email** layer: **SMTP** (e.g. the Plesk mail server) when
+  `SMTP_HOST` is set, else **Resend** when `RESEND_API_KEY` is set, else emails
+  are logged to the console (the app runs fully with no email config)
 - Local **file uploads** for documents/deliverables (structured to move to cloud
   storage later)
 
@@ -58,8 +59,11 @@ All are documented in [`.env.example`](./.env.example). The app runs end-to-end
 | `AUTH_SECRET`            | Secret used to sign session JWTs. `openssl rand -base64 32`.            |
 | `NEXTAUTH_URL`           | Base URL of the app (e.g. `http://localhost:3000`).                     |
 | `APP_URL`                | Base URL used in email links and SEO.                                   |
-| `RESEND_API_KEY`         | Optional. If set, real email is sent via Resend; otherwise console log. |
-| `EMAIL_FROM`             | From address, e.g. `Rowan Copy <landen@rowancopy.com>`.                 |
+| `SMTP_HOST`              | Mail server host (e.g. the Plesk domain). When set, email sends via SMTP. |
+| `SMTP_PORT`              | `587` (STARTTLS) or `465` (implicit TLS). Defaults to 587.              |
+| `SMTP_USER` / `SMTP_PASS`| Mailbox login (e.g. `info@rowancopy.com` + its password).             |
+| `RESEND_API_KEY`         | Used only if `SMTP_HOST` is unset. Otherwise console log.               |
+| `EMAIL_FROM`             | From / reply-to address, e.g. `Rowan Copy <info@rowancopy.com>`.        |
 | `INBOUND_WEBHOOK_SECRET` | Secret for the inbound-email webhook. Open if unset (dev only).         |
 
 ## Demo accounts

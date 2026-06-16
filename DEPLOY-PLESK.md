@@ -72,11 +72,19 @@ In the **Node.js** panel, use **Custom environment variables**. Add:
 | `AUTH_SECRET`            | output of `openssl rand -base64 32`                        |
 | `NEXTAUTH_URL`           | `https://rowancopy.com`                                    |
 | `APP_URL`                | `https://rowancopy.com`                                    |
-| `EMAIL_FROM`             | `Rowan Copy <landen@rowancopy.com>`                        |
-| `RESEND_API_KEY`         | your Resend key (optional — omit to log emails instead)    |
+| `EMAIL_FROM`             | `Rowan Copy <info@rowancopy.com>`                          |
+| `SMTP_HOST`              | `rowancopy.com` (your Plesk mail host) — see step 8        |
+| `SMTP_PORT`              | `587`                                                       |
+| `SMTP_USER`              | `info@rowancopy.com`                                        |
+| `SMTP_PASS`              | the mailbox password                                       |
 | `INBOUND_WEBHOOK_SECRET` | a long random string (required in production)              |
 | `NODE_ENV`               | `production`                                               |
 
+> Email transport is chosen automatically: with `SMTP_HOST` set, the app sends
+> through your Plesk mail server (step 8). Leave it blank and set
+> `RESEND_API_KEY` instead to use Resend; leave both blank and emails are just
+> logged to the console.
+>
 > `server.js` also auto-loads a `.env` file from the Application Root if you
 > prefer to keep secrets in a file. Plesk env vars take precedence.
 
@@ -134,7 +142,66 @@ The app's secure cookies require HTTPS in production — keep SSL active and
 
 ---
 
-## 8. Scheduled automations (recommended)
+## 8. Email — Plesk mail server (send + receive)
+
+The app both **sends** its automated email (auto-replies, status updates,
+welcome emails, the portal's Compose Email, etc.) and lets you **receive** mail
+at `info@rowancopy.com` — all through the Plesk mail server.
+
+### 8a. Create the mailbox
+
+1. Plesk → your domain → **Mail** → enable the mail service for the domain.
+2. **Mail** → **Create Email Address** → `info@rowancopy.com`, set a password.
+3. Make sure Plesk created the **MX record** for the domain pointing at this
+   server (Plesk → **DNS Settings**). If your DNS is in Route 53, copy the same
+   `MX` record there.
+4. Read the inbox via Plesk **webmail** (`https://webmail.rowancopy.com`) or
+   connect a mail client over **IMAP** (993) / **SMTP submission** (587).
+
+### 8b. AWS-specific requirements (important for deliverability)
+
+EC2 throttles/blocks outbound mail by default, and unknown IPs land in spam.
+Do these three things:
+
+1. **Remove the outbound port-25 block:** submit the AWS "Request to remove email
+   sending limitations" form for your instance/Elastic IP (the mail server needs
+   port 25 outbound to deliver to other servers).
+2. **Reverse DNS (PTR):** in the same AWS request (or the EC2 console), set a
+   **PTR record** on your **Elastic IP** to `rowancopy.com` (or `mail.rowancopy.com`).
+   Receiving servers check this.
+3. **Security Group:** allow inbound **25** (to receive mail) and, for your own
+   mail clients, **587** and **993**.
+
+### 8c. SPF / DKIM / DMARC
+
+In Plesk → **Mail** → **Mail Settings**, enable **DKIM** and **SPF** for the
+domain. Then add/confirm these DNS records (Plesk shows the exact values):
+
+- **SPF** (`TXT` on `rowancopy.com`): `v=spf1 a mx ~all`
+- **DKIM**: the `TXT` record Plesk generates (e.g. `default._domainkey`).
+- **DMARC** (`TXT` on `_dmarc.rowancopy.com`): `v=DMARC1; p=none; rua=mailto:info@rowancopy.com`
+
+These are what keep the studio's emails out of spam folders.
+
+### 8d. Point the app at the mailbox
+
+Set the SMTP env vars from step 4 (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`,
+`SMTP_PASS`) and `EMAIL_FROM="Rowan Copy <info@rowancopy.com>"`, then **Restart
+App**. Because the app sends *from* `info@rowancopy.com`, **client replies and
+anything sent to `info@rowancopy.com` both land in that Plesk inbox.**
+
+Verify from the portal: **Admin → Compose email** → send yourself a test. The
+**Admin → Signature & settings** page shows the active mode (it should read
+*SMTP / Plesk mail*), and **Sent email history** logs every send with status
+`sent`.
+
+> Tip: until port 25 / PTR / DKIM are sorted, you can leave `SMTP_HOST` blank and
+> set `RESEND_API_KEY` to send via Resend while still **receiving** at the Plesk
+> mailbox — the two are independent.
+
+---
+
+## 9. Scheduled automations (recommended)
 
 The app's scheduled automations — due-soon reminders to the team, overdue
 alerts, monthly-plan renewal reminders, and the admin daily digest — all fire
@@ -153,7 +220,7 @@ and don't need this job.
 
 ---
 
-## 9. Deploying updates / restarting
+## 10. Deploying updates / restarting
 
 ```bash
 cd /var/www/vhosts/rowancopy.com/app
@@ -187,10 +254,15 @@ chown <app-user>:psacln /var/www/vhosts/rowancopy.com/app/uploads
 For higher durability you can later move uploads to S3 — only
 `src/lib/uploads.ts` and the document download route need to change.
 
-## Inbound email (optional)
+## In-portal email threading (optional, advanced)
 
-To file inbound email into the portal, point your provider's inbound webhook
-(Resend / Mailgun / Postmark) at:
+Step 8 gives you a normal `info@rowancopy.com` inbox you read in webmail/IMAP —
+that's all most people need. Separately, the app can file *inbound* email into
+the portal's **Messages** via a webhook. This needs a provider that posts
+incoming mail as a webhook (Resend inbound / Mailgun routes / Postmark), pointed
+at the URL below — so you'd route receiving there instead of (or forwarded from)
+the Plesk mailbox. Skip unless you specifically want client replies threaded in
+the portal.
 
 ```
 https://rowancopy.com/api/email/inbound?secret=YOUR_INBOUND_WEBHOOK_SECRET

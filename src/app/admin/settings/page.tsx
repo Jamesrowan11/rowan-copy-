@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/authz";
 import { getSignature } from "@/lib/signature";
+import { emailMode } from "@/lib/email";
 import { getAutomationStates } from "@/lib/automations";
 import { PageHeader } from "@/components/portal/ui";
 import { ActionForm } from "@/components/portal/ActionForm";
@@ -12,7 +13,13 @@ export default async function AdminSettingsPage() {
     getSignature(),
     getAutomationStates(),
   ]);
-  const emailMode = process.env.RESEND_API_KEY ? "Resend (live email)" : "Console log (no API key set)";
+  const EMAIL_MODE_LABELS = {
+    smtp: `SMTP / Plesk mail (${process.env.SMTP_HOST})`,
+    resend: "Resend (live email)",
+    console: "Console log (no mail configured)",
+  } as const;
+  const deliveryMode = EMAIL_MODE_LABELS[emailMode()];
+  const emailFrom = process.env.EMAIL_FROM || "Rowan Copy <info@rowancopy.com>";
 
   return (
     <>
@@ -52,11 +59,17 @@ export default async function AdminSettingsPage() {
           <div className="card p-6">
             <h2 className="mb-2 text-lg font-600 text-navy">Email delivery</h2>
             <p className="text-sm text-navy-600">
-              Current mode: <strong className="text-navy">{emailMode}</strong>
+              Current mode: <strong className="text-navy">{deliveryMode}</strong>
+            </p>
+            <p className="mt-1 text-sm text-navy-600">
+              Sending as: <strong className="text-navy">{emailFrom}</strong>
             </p>
             <p className="mt-2 text-xs text-navy-500">
-              Set <code className="rounded bg-navy-50 px-1">RESEND_API_KEY</code> in the environment to send real email.
-              Without it, every email is logged to the server console and recorded in the sent history.
+              Set <code className="rounded bg-navy-50 px-1">SMTP_HOST</code> (and
+              <code className="ml-1 rounded bg-navy-50 px-1">SMTP_USER</code>/
+              <code className="rounded bg-navy-50 px-1">SMTP_PASS</code>) to send through your
+              Plesk mail server. With nothing configured, emails are logged to the console and
+              still recorded in the sent history.
             </p>
           </div>
         </section>

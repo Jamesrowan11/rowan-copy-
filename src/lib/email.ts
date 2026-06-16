@@ -18,7 +18,39 @@ export type SendEmailInput = {
   appendSignature?: boolean;
 };
 
-const EMAIL_FROM = process.env.EMAIL_FROM || "Rowan Copy <landen@rowancopy.com>";
+const EMAIL_FROM = process.env.EMAIL_FROM || "Rowan Copy <info@rowancopy.com>";
+
+export type EmailMode = "smtp" | "resend" | "console";
+
+/** Which transport sendEmail() will use, based on the environment. */
+export function emailMode(): EmailMode {
+  if (process.env.SMTP_HOST) return "smtp";
+  if (process.env.RESEND_API_KEY) return "resend";
+  return "console";
+}
+
+// Reuse a single SMTP transporter across calls.
+let cachedTransport: import("nodemailer").Transporter | null = null;
+
+async function getSmtpTransport() {
+  if (cachedTransport) return cachedTransport;
+  const nodemailer = await import("nodemailer");
+  const port = Number(process.env.SMTP_PORT) || 587;
+  // Port 465 is implicit TLS; 587/25 upgrade via STARTTLS. SMTP_SECURE overrides.
+  const secure =
+    process.env.SMTP_SECURE != null
+      ? process.env.SMTP_SECURE === "true"
+      : port === 465;
+  cachedTransport = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port,
+    secure,
+    auth: process.env.SMTP_USER
+      ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+      : undefined,
+  });
+  return cachedTransport;
+}
 
 function textToHtml(text: string): string {
   return text
@@ -35,9 +67,12 @@ function textToHtml(text: string): string {
 }
 
 /**
- * Pluggable email send. If RESEND_API_KEY is set, sends via Resend; otherwise
- * logs the full email to the server console. Every send is recorded in EmailLog
- * with the sender, recipients, subject, body, status and timestamp.
+ * Pluggable email send. Transport is chosen by environment, in priority order:
+ *   1. SMTP (Plesk mail server) when SMTP_HOST is set
+ *   2. Resend when RESEND_API_KEY is set
+ *   3. Console log otherwise (so the app runs end-to-end with no mail config)
+ * Every send is recorded in EmailLog with the sender, recipients, subject, body,
+ * status and timestamp.
  */
 export async function sendEmail(input: SendEmailInput) {
   const { to, subject, senderUserId } = input;
@@ -58,15 +93,26 @@ export async function sendEmail(input: SendEmailInput) {
     .join(", ");
 
   let status: "sent" | "logged" | "failed" = "logged";
-  const apiKey = process.env.RESEND_API_KEY;
+  const cleanTo = to.map((t) => t.trim()).filter(Boolean);
+  const mode = emailMode();
 
-  if (apiKey) {
+  if (mode === "smtp") {
+    // Send through the Plesk (or any) SMTP mail server.
+    try {
+      const transport = await getSmtpTransport();
+      await transport.sendMail({ from: EMAIL_FROM, to: cleanTo, subject, text, html });
+      status = "sent";
+    } catch (err) {
+      status = "failed";
+      console.error("[email] SMTP send failed:", err);
+    }
+  } else if (mode === "resend") {
     try {
       const { Resend } = await import("resend");
-      const resend = new Resend(apiKey);
+      const resend = new Resend(process.env.RESEND_API_KEY);
       const res = await resend.emails.send({
         from: EMAIL_FROM,
-        to: to.map((t) => t.trim()).filter(Boolean),
+        to: cleanTo,
         subject,
         text,
         html,
