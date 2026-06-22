@@ -14,6 +14,7 @@ export default async function AdminLayout({
     { href: "/admin", label: "Overview" },
     { href: "/admin/inquiries", label: "Inquiries" },
     { href: "/admin/projects", label: "Projects" },
+    { href: "/admin/leads", label: "Lead generator" },
     { href: "/admin/mail", label: "Mail" },
     { href: "/admin/messages", label: "Messages", badge: unread || undefined },
     { href: "/admin/emails", label: "Compose email" },

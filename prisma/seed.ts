@@ -24,6 +24,7 @@ async function main() {
   console.log("Seeding Rowan Copy database…");
 
   // --- Clean (dev only) — delete in FK-safe order -------------------------
+  await prisma.demo.deleteMany();
   await prisma.mailbox.deleteMany();
   await prisma.appSetting.deleteMany();
   await prisma.message.deleteMany();

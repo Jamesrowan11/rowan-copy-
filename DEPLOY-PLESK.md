@@ -78,6 +78,7 @@ In the **Node.js** panel, use **Custom environment variables**. Add:
 | `SMTP_USER`              | `info@rowancopy.com`                                        |
 | `SMTP_PASS`              | the mailbox password                                       |
 | `INBOUND_WEBHOOK_SECRET` | a long random string (required in production)              |
+| `ANTHROPIC_API_KEY`      | Anthropic key for the Lead Generator (see §11)             |
 | `NODE_ENV`               | `production`                                               |
 
 > Email transport is chosen automatically: with `SMTP_HOST` set, the app sends
@@ -263,6 +264,60 @@ Then restart the app — either:
 ```bash
 mkdir -p tmp && touch tmp/restart.txt
 ```
+
+---
+
+## 11. Lead Generator (sample-site auto-deploy)
+
+The Lead Generator researches a business with Claude, builds a sample one-page
+site, and **deploys it live to a subdomain on this server** (`<label>.rowancopy.com`).
+
+### 11a. Anthropic key
+
+Add `ANTHROPIC_API_KEY` (from <https://console.anthropic.com>) to the Node.js
+env vars (step 4). Without it, demos still queue but finish with an `Error`
+status — nothing crashes.
+
+### 11b. Wildcard DNS + SSL
+
+So any generated subdomain resolves and gets HTTPS automatically:
+
+1. In DNS, add a **wildcard A record** `*.rowancopy.com` → the server's Elastic IP.
+2. In Plesk → your domain → **Hosting & DNS → DNS**, confirm the wildcard, and
+   under **SSL/TLS** enable **"Keep websites secured"** (and a wildcard Let's
+   Encrypt certificate) so new subdomains are served over HTTPS without manual steps.
+
+### 11c. Scoped sudoers rule (least privilege)
+
+The app shells out to `plesk bin subdomain` to create/remove subdomains. Grant
+the Node app's OS user permission to run **only that one command** as root —
+**not** full root. Find the app user (Plesk → Subscriptions → your domain →
+shows the system user, e.g. `rowancopy`), then:
+
+```bash
+sudo visudo -f /etc/sudoers.d/rowancopy-leadgen
+```
+
+Add exactly (replace `rowancopy` with your subscription's system user):
+
+```
+# Allow the Rowan Copy app to manage ONLY Plesk subdomains, nothing else.
+rowancopy ALL=(root) NOPASSWD: /usr/sbin/plesk bin subdomain --create *, /usr/sbin/plesk bin subdomain --remove *
+```
+
+Verify the `plesk` path with `which plesk` (often `/usr/sbin/plesk` or
+`/usr/local/psa/bin/...`); use the real absolute path in the rule. Confirm the
+app user can write subdomain web roots under `DEMO_VHOST_ROOT`
+(`/var/www/vhosts/rowancopy.com`) — by default the subscription user already
+owns that tree.
+
+> The generated subdomain label is slugified to `[a-z0-9-]` only, and the app
+> invokes the command with `execFile` (no shell), so the fixed-argument call is
+> not susceptible to shell injection. The sudoers rule still scopes it to just
+> the two `plesk bin subdomain` actions as defense in depth.
+
+Deleting a demo in the portal ("Delete & tear down") runs
+`plesk bin subdomain --remove`, so dead demos don't accumulate.
 
 ---
 

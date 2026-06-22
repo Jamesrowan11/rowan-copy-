@@ -39,6 +39,12 @@ const STATUS_STYLES: Record<string, string> = {
   Reviewed: "bg-blue-100 text-blue-700",
   Converted: "bg-emerald-100 text-emerald-700",
   Archived: "bg-navy-100 text-navy-500",
+  // lead generator (Demo)
+  Queued: "bg-navy-100 text-navy-600",
+  Building: "bg-blue-100 text-blue-700",
+  Ready: "bg-emerald-100 text-emerald-700",
+  DeployFailed: "bg-orange-100 text-orange-700",
+  Error: "bg-red-100 text-red-700",
 };
 
 export function StatusBadge({ status }: { status: string }) {

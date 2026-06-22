@@ -66,6 +66,8 @@ All are documented in [`.env.example`](./.env.example). The app runs end-to-end
 | `EMAIL_FROM`             | From / reply-to address, e.g. `Rowan Copy <info@rowancopy.com>`.        |
 | `INBOUND_WEBHOOK_SECRET` | Secret for the inbound-email webhook. Open if unset (dev only).         |
 | `MAIL_CRYPTO_SECRET`     | Encrypts stored mailbox passwords (webmail). Falls back to `AUTH_SECRET`. |
+| `ANTHROPIC_API_KEY`      | Server-only key for the Lead Generator (research + sample-site build).  |
+| `DEMO_DOMAIN` / `DEMO_VHOST_ROOT` | Lead Generator deploy target (defaults to rowancopy.com).      |
 
 ## Demo accounts
 
@@ -170,6 +172,21 @@ Signature & settings → Automations) and on by default:
   due-soon reminders to assignees, overdue alerts to admins, monthly-plan
   renewal reminders to clients, and the admin daily digest. Sends are deduped,
   so running it more than daily never double-emails.
+
+### Lead Generator (admin + employee)
+
+Enter a business's details and the app **researches it online with Claude**
+(`claude-sonnet-4-6` + web search), **builds a personalized sample one-page
+site**, **deploys it live** to a subdomain on this same Plesk server
+(`<label>.rowancopy.com`), and **drafts a friendly outreach email**
+(`claude-haiku-4-5`) — all in the background so the form returns instantly. Each
+result is a **Demo** record (Queued → Building → Ready) that can be **converted
+into a Project + Client** exactly like an Inquiry, or **deleted (which tears
+down the live subdomain)**. The Anthropic key is read server-side only; the
+heavy work runs in a secured route (`POST /api/demos/[id]/run`). No outreach
+email is ever sent automatically — drafts are copyable only. See
+`DEPLOY-PLESK.md` for the `ANTHROPIC_API_KEY` and the scoped sudoers rule that
+lets the app run only `plesk bin subdomain`.
 
 ### Security model
 

@@ -59,6 +59,7 @@ model User {
   reviewsAsClient Review[] @relation("ReviewClient")
   auditLogs      AuditLog[] @relation("AuditActor")
   mailboxes      Mailbox[]  @relation("MailboxOwner")
+  demosCreated   Demo[]     @relation("DemoCreator")
 }
 
 // ---------------------------------------------------------------------------
@@ -396,6 +397,30 @@ model Mailbox {
   active        Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+// Lead Generator: a prospect business researched + given a sample one-page site
+// deployed to a subdomain. Can be converted into a Project + Client like an Inquiry.
+model Demo {
+  id                 String   @id @default(cuid())
+  businessName       String
+  city               String
+  industry           String
+  email              String
+  currentWebsite     String?
+  subdomainLabel     String?
+  liveUrl            String?
+  researchSummary    String?
+  foundExistingSite  Boolean?
+  emailSubject       String?
+  emailBody          String?
+  // Queued | Building | Ready | DeployFailed | Error
+  status             String   @default("Queued")
+  createdById        String
+  createdBy          User     @relation("DemoCreator", fields: [createdById], references: [id])
+  convertedProjectId String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 // Simple key-value settings (automation toggles, etc.). Missing keys fall back
