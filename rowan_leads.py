@@ -6,19 +6,29 @@ For each lead in leads_input.csv this tool:
   1. Uses Claude (claude-sonnet-4-6) WITH the web search tool to research the
      business online, summarise it, and build a clean, modern, mobile-friendly
      one-page sample website that is clearly better than what they have today.
-  2. Uses Claude (claude-haiku-4-5) to draft a short, friendly cold outreach
-     email (with a subject line and a placeholder for the website link).
-  3. Writes one row per lead to output/results.csv. It NEVER sends email.
+  2. Publishes that site live to a fresh subdomain on the local Plesk server
+     (e.g. https://maple-street-dental-a7f3.rowancopy.com) via `plesk bin`.
+  3. Uses Claude (claude-haiku-4-5) to draft a short, friendly cold outreach
+     email, dropping the real live URL into it.
+  4. Writes one row per lead to output/results.csv. It NEVER sends email.
+
+This tool is designed to RUN ON the Plesk server itself, as a user with rights
+to run `plesk bin`.
 
 Set your API key with:   export ANTHROPIC_API_KEY="sk-ant-..."
 Run with:                python rowan_leads.py
+Tear down a demo with:   python rowan_leads.py --remove <label>
 """
 
 import csv
 import os
 import re
 import sys
+import string
+import secrets
+import argparse
 import datetime
+import subprocess
 from pathlib import Path
 
 try:
@@ -46,6 +56,16 @@ WEBSITES_DIR = Path("websites")
 OUTPUT_DIR = Path("output")
 OUTPUT_CSV = OUTPUT_DIR / "results.csv"
 
+# Plesk deployment. This tool runs ON the Plesk server. A wildcard DNS record
+# (*.rowancopy.com -> server IP) and a wildcard *.rowancopy.com Let's Encrypt
+# cert are assumed to already be in place (see README) — we never issue certs.
+PARENT_DOMAIN = "rowancopy.com"
+VHOST_BASE = Path("/var/www/vhosts")  # docroot is VHOST_BASE/<domain>/<label>
+
+# The literal token Claude leaves in the email body; we swap in the live URL.
+LINK_PLACEHOLDER = "{WEBSITE_LINK}"
+LABEL_MAX_LEN = 50  # before the "-xxxx" random suffix
+
 # Keep the research summary that we forward to the (cheaper) email model small,
 # so a verbose research turn never blows up email-step token costs.
 SUMMARY_CHARS_FOR_EMAIL = 1500
@@ -61,10 +81,77 @@ REQUIRED_COLUMNS = ["business_name", "industry", "city", "email", "current_websi
 
 # --- Helpers -----------------------------------------------------------------
 
+class DeployError(Exception):
+    """Raised when publishing a site to Plesk fails."""
+
+
 def slugify(name: str) -> str:
     """Turn a business name into a safe filename stem."""
     slug = re.sub(r"[^A-Za-z0-9]+", "-", name.strip()).strip("-").lower()
     return slug or "business"
+
+
+def make_subdomain_label(name: str) -> str:
+    """Build a unique subdomain label from a business name.
+
+    Lowercase, non-alphanumerics -> hyphens, collapse/strip hyphens, truncate
+    to LABEL_MAX_LEN, then append a hyphen + random 4-char id. e.g.
+    "Maple Street Dental" -> "maple-street-dental-a7f3".
+    """
+    base = re.sub(r"[^a-z0-9]+", "-", name.lower())
+    base = re.sub(r"-+", "-", base).strip("-")
+    base = base[:LABEL_MAX_LEN].strip("-") or "site"
+    alphabet = string.ascii_lowercase + string.digits
+    suffix = "".join(secrets.choice(alphabet) for _ in range(4))
+    return f"{base}-{suffix}"
+
+
+def create_subdomain(label: str) -> None:
+    """Create the subdomain on Plesk. Raises DeployError on failure."""
+    cmd = [
+        "plesk", "bin", "subdomain", "--create", label,
+        "-domain", PARENT_DOMAIN, "-www-root", f"/{label}",
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        raise DeployError(f"`plesk` not found — is this running on the Plesk server? ({exc})")
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip()
+        raise DeployError(f"plesk subdomain --create failed: {detail}")
+
+
+def deploy_site(label: str, html: str) -> str:
+    """Create the subdomain and write index.html into its docroot.
+
+    Returns the live URL. Raises DeployError on any failure.
+    """
+    create_subdomain(label)
+    docroot = VHOST_BASE / PARENT_DOMAIN / label
+    try:
+        docroot.mkdir(parents=True, exist_ok=True)
+        (docroot / "index.html").write_text(html, encoding="utf-8")
+    except OSError as exc:
+        raise DeployError(f"could not write index.html to {docroot}: {exc}")
+    return f"https://{label}.{PARENT_DOMAIN}"
+
+
+def remove_subdomain(label: str) -> int:
+    """Tear down a demo subdomain via Plesk. Returns a process exit code."""
+    cmd = ["plesk", "bin", "subdomain", "--remove", label, "-domain", PARENT_DOMAIN]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+    except FileNotFoundError:
+        print("`plesk` not found — this command must run on the Plesk server.",
+              file=sys.stderr)
+        return 1
+    out = (proc.stdout or "").strip()
+    err = (proc.stderr or "").strip()
+    if proc.returncode == 0:
+        print(f"Removed subdomain {label}.{PARENT_DOMAIN}" + (f"\n{out}" if out else ""))
+    else:
+        print(f"Failed to remove {label}.{PARENT_DOMAIN}: {err or out}", file=sys.stderr)
+    return proc.returncode
 
 
 def collect_text(content) -> str:
@@ -237,7 +324,11 @@ def write_email(client, lead: dict, research_summary: str) -> dict:
 
 
 def process_lead(client, lead: dict) -> dict:
-    """Process a single lead end-to-end. Raises on failure."""
+    """Process a single lead end-to-end. Raises on research/email failure.
+
+    A Plesk deploy failure does NOT raise — it is recorded as status
+    "deploy_failed" so the run keeps moving to the next lead.
+    """
     name = lead["business_name"]
 
     site = research_and_build_site(client, lead)
@@ -246,6 +337,22 @@ def process_lead(client, lead: dict) -> dict:
     website_path.write_text(site["html"], encoding="utf-8")
 
     email = write_email(client, lead, site["summary"])
+    subject = email["subject"]
+    body = email["body"]
+
+    # Publish the site live to a fresh subdomain on Plesk.
+    label = make_subdomain_label(name)
+    live_url = ""
+    try:
+        live_url = deploy_site(label, site["html"])
+        status = "deployed"
+        # Drop the real address into the email in place of the placeholder.
+        body = body.replace(LINK_PLACEHOLDER, live_url)
+    except DeployError as exc:
+        status = "deploy_failed"
+        # Leave the {WEBSITE_LINK} placeholder intact so no dead link is sent.
+        print(f"    DEPLOY FAILED for {name} ({label}): {exc}",
+              file=sys.stderr, flush=True)
 
     return {
         "business_name": name,
@@ -253,10 +360,12 @@ def process_lead(client, lead: dict) -> dict:
         "website_file": str(website_path),
         "research_summary": site["summary"][:SUMMARY_CHARS_STORED],
         "found_existing_site": site["found_existing_site"],
-        "email_subject": email["subject"],
-        "email_body": email["body"],
+        "email_subject": subject,
+        "email_body": body,
+        "live_url": live_url,
+        "subdomain_label": label,
         "date": datetime.date.today().isoformat(),
-        "status": "drafted",
+        "status": status,
     }
 
 
@@ -283,8 +392,9 @@ def main() -> None:
     client = anthropic.Anthropic()
 
     results = []
-    succeeded = 0
-    failed = 0
+    deployed = 0
+    deploy_failed = 0
+    errored = 0
     existing_found = 0
 
     total = len(df)
@@ -296,21 +406,24 @@ def main() -> None:
         try:
             result = process_lead(client, lead)
             results.append(result)
-            succeeded += 1
             if result["found_existing_site"] == "yes":
                 existing_found += 1
-                note = "existing site found"
-            else:
-                note = "no existing site — built from CSV info"
-            print(f"    done ({note}) -> {result['website_file']}", flush=True)
+            if result["status"] == "deployed":
+                deployed += 1
+                print(f"    done -> {result['live_url']}", flush=True)
+            else:  # deploy_failed
+                deploy_failed += 1
+                print(f"    site built ({result['website_file']}) but NOT "
+                      f"deployed — see error above", flush=True)
         except Exception as exc:  # one bad row never crashes the whole run
-            failed += 1
+            errored += 1
             print(f"    FAILED: {exc}", file=sys.stderr, flush=True)
 
     # Write the output CSV (even if some/all leads failed).
     fieldnames = [
         "business_name", "email", "website_file", "research_summary",
-        "found_existing_site", "email_subject", "email_body", "date", "status",
+        "found_existing_site", "email_subject", "email_body",
+        "live_url", "subdomain_label", "date", "status",
     ]
     with OUTPUT_CSV.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -322,8 +435,9 @@ def main() -> None:
     print("  Rowan Copy — lead generation summary")
     print("=" * 44)
     print(f"  {'Total leads':<28}{total:>14}")
-    print(f"  {'Succeeded':<28}{succeeded:>14}")
-    print(f"  {'Failed':<28}{failed:>14}")
+    print(f"  {'Deployed':<28}{deployed:>14}")
+    print(f"  {'Deploy failed':<28}{deploy_failed:>14}")
+    print(f"  {'Errored (skipped)':<28}{errored:>14}")
     print(f"  {'Existing site found':<28}{existing_found:>14}")
     print("=" * 44)
     print(f"  Results written to: {OUTPUT_CSV}")
@@ -331,5 +445,20 @@ def main() -> None:
     print("  No emails were sent — all rows are drafts.")
 
 
+def parse_args(argv=None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Rowan Copy lead-generation pipeline (runs on the Plesk server).",
+    )
+    parser.add_argument(
+        "--remove",
+        metavar="LABEL",
+        help="Tear down a demo subdomain (e.g. maple-street-dental-a7f3) and exit.",
+    )
+    return parser.parse_args(argv)
+
+
 if __name__ == "__main__":
+    args = parse_args()
+    if args.remove:
+        sys.exit(remove_subdomain(args.remove))
     main()
