@@ -188,6 +188,28 @@ email is ever sent automatically — drafts are copyable only. See
 `DEPLOY-PLESK.md` for the `ANTHROPIC_API_KEY` and the scoped sudoers rule that
 lets the app run only `plesk bin subdomain`.
 
+**CSV mass-import.** Alongside the single-business form, an **Import CSV** panel
+takes an export from Olivine, Apollo, or anywhere. Upload the file, map the
+detected columns (the mapping is pre-guessed from common header names), and
+import the rows as **draft demos** (status `Imported`) — nothing is generated or
+emailed at import time. Rows without a business name are skipped, and rows whose
+**business name + city** already exist as a demo are skipped as duplicates
+(re-importing or overlapping files never creates duplicates). Imported demos
+show in the table with an `Imported` badge; generate them individually or with
+**Generate all imported**, which runs the same in-process pipeline sequentially
+(one at a time, with a short delay) to control API cost and avoid rate limits.
+
+The CSV needs a **header row**; only `businessName` must be mappable. Quoted
+fields, commas inside values, and `""` escapes are handled. A working example is
+in [`leads-sample.csv`](./leads-sample.csv):
+
+```csv
+Company Name,City,Industry,Email,Website
+Hillside Plumbing & Heating,Ellicott City,Plumber,hello@hillsideplumbing.com,https://hillsideplumbing.com
+Cedar Lane Yoga,Columbia,Yoga Studio,studio@cedarlaneyoga.com,
+"Webb & Sons Landscaping, LLC",Catonsville,Landscaping,marcus@webblandscaping.com,https://webblandscaping.com
+```
+
 ### Security model
 
 All access control is enforced **server-side on the data** — in page loaders,

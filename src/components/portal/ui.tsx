@@ -41,6 +41,7 @@ const STATUS_STYLES: Record<string, string> = {
   Archived: "bg-navy-100 text-navy-500",
   // lead generator (Demo)
   Queued: "bg-navy-100 text-navy-600",
+  Imported: "bg-accent-soft text-accent-hover",
   Building: "bg-blue-100 text-blue-700",
   Ready: "bg-emerald-100 text-emerald-700",
   DeployFailed: "bg-orange-100 text-orange-700",

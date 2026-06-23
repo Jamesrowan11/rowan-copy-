@@ -8,6 +8,7 @@ import { audit } from "@/lib/audit";
 import { hashPassword } from "@/lib/password";
 import { teardownSubdomain } from "@/lib/deploy";
 import { runDemoPipeline, safeError } from "@/lib/demo-pipeline";
+import { parseCsv, guessMapping, IMPORT_FIELDS, type ImportField } from "@/lib/csv";
 import crypto from "crypto";
 
 type Result = { ok: boolean; error?: string };
@@ -82,6 +83,180 @@ export async function createDemo(_prev: Result, formData: FormData): Promise<Res
   revalidatePath("/admin/leads");
   revalidatePath("/staff/leads");
   return OK;
+}
+
+// --------------------------------------------------------------------------
+// CSV mass-import
+// --------------------------------------------------------------------------
+
+const MAX_CSV_BYTES = 5 * 1024 * 1024; // 5 MB
+
+export type CsvHeadersResult = {
+  ok: boolean;
+  error?: string;
+  headers?: string[];
+  dataRowCount?: number;
+  guesses?: Record<ImportField, string>;
+};
+
+/** Parse an uploaded CSV's header row and pre-guess the column mapping. */
+export async function parseCsvHeaders(
+  _prev: CsvHeadersResult,
+  formData: FormData,
+): Promise<CsvHeadersResult> {
+  await requireRoleAction("ADMIN", "EMPLOYEE");
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) return { ok: false, error: "Choose a CSV file." };
+  if (file.size > MAX_CSV_BYTES) return { ok: false, error: "File is too large (max 5 MB)." };
+
+  let rows: string[][];
+  try {
+    rows = parseCsv(await file.text());
+  } catch {
+    return { ok: false, error: "Could not read that file as CSV." };
+  }
+  if (rows.length < 1) return { ok: false, error: "The CSV appears to be empty." };
+
+  const headers = rows[0].map((h) => h.trim());
+  if (headers.every((h) => h === "")) {
+    return { ok: false, error: "No header row detected." };
+  }
+  return {
+    ok: true,
+    headers,
+    dataRowCount: rows.length - 1,
+    guesses: guessMapping(headers),
+  };
+}
+
+export type CsvImportResult = {
+  ok: boolean;
+  error?: string;
+  imported?: number;
+  skippedDuplicate?: number;
+  skippedNoName?: number;
+};
+
+/** Import mapped CSV rows as draft Demos (status "Imported"). Deduped, no generation. */
+export async function importCsv(
+  _prev: CsvImportResult,
+  formData: FormData,
+): Promise<CsvImportResult> {
+  const me = await requireRoleAction("ADMIN", "EMPLOYEE");
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) return { ok: false, error: "Choose a CSV file." };
+  if (file.size > MAX_CSV_BYTES) return { ok: false, error: "File is too large (max 5 MB)." };
+
+  // Column mapping: field -> header name.
+  const map = {} as Record<ImportField, string>;
+  for (const f of IMPORT_FIELDS) map[f] = String(formData.get(`map_${f}`) || "");
+  if (!map.businessName) return { ok: false, error: "Map the Business name column." };
+
+  let rows: string[][];
+  try {
+    rows = parseCsv(await file.text());
+  } catch {
+    return { ok: false, error: "Could not read that file as CSV." };
+  }
+  if (rows.length < 2) return { ok: false, error: "No data rows to import." };
+
+  const headers = rows[0].map((h) => h.trim());
+  const colIdx = {} as Record<ImportField, number>;
+  for (const f of IMPORT_FIELDS) colIdx[f] = map[f] ? headers.indexOf(map[f]) : -1;
+
+  // Dedupe against existing demos (businessName + city, case-insensitive) AND
+  // against rows already seen within this file.
+  const existing = await prisma.demo.findMany({ select: { businessName: true, city: true } });
+  const seen = new Set(
+    existing.map((d) => `${d.businessName.trim().toLowerCase()}|${(d.city || "").trim().toLowerCase()}`),
+  );
+
+  const get = (row: string[], ix: number) =>
+    ix >= 0 && ix < row.length ? String(row[ix]).trim() : "";
+
+  let skippedNoName = 0;
+  let skippedDuplicate = 0;
+  const toCreate: {
+    businessName: string;
+    city: string;
+    industry: string;
+    email: string;
+    currentWebsite: string | null;
+    status: string;
+    createdById: string;
+  }[] = [];
+
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    const businessName = get(row, colIdx.businessName);
+    if (!businessName) {
+      skippedNoName++;
+      continue;
+    }
+    const city = get(row, colIdx.city);
+    const key = `${businessName.toLowerCase()}|${city.toLowerCase()}`;
+    if (seen.has(key)) {
+      skippedDuplicate++;
+      continue;
+    }
+    seen.add(key);
+    toCreate.push({
+      businessName,
+      city,
+      industry: get(row, colIdx.industry),
+      email: get(row, colIdx.email).toLowerCase(),
+      currentWebsite: get(row, colIdx.currentWebsite) || null,
+      status: "Imported",
+      createdById: me.id,
+    });
+  }
+
+  if (toCreate.length) await prisma.demo.createMany({ data: toCreate });
+
+  await audit({
+    actorId: me.id,
+    action: "create",
+    entityType: "Demo",
+    summary: `Imported ${toCreate.length} lead(s) from CSV (skipped ${skippedDuplicate} duplicate, ${skippedNoName} without a name)`,
+  });
+
+  revalidatePath("/admin/leads");
+  revalidatePath("/staff/leads");
+  return { ok: true, imported: toCreate.length, skippedDuplicate, skippedNoName };
+}
+
+// --------------------------------------------------------------------------
+// Generation (shared in-process pipeline)
+// --------------------------------------------------------------------------
+
+/** Per-row "Generate demo": fire the pipeline in the background (status -> Building -> Ready). */
+export async function generateDemo(id: string): Promise<Result> {
+  await requireRoleAction("ADMIN", "EMPLOYEE");
+  const demo = await prisma.demo.findUnique({ where: { id } });
+  if (!demo) return fail("Demo not found.");
+  // Mark Queued immediately so the table starts polling, then run in background.
+  await prisma.demo.update({ where: { id }, data: { status: "Queued" } });
+  startDemoPipeline(id);
+  revalidatePath("/admin/leads");
+  revalidatePath("/staff/leads");
+  return OK;
+}
+
+/**
+ * "Generate all imported": awaits the FULL pipeline for one demo so the client
+ * can drive a sequential loop (one at a time, with a delay) to control API cost
+ * and avoid rate limits. Returns the final status.
+ */
+export async function generateDemoNow(
+  id: string,
+): Promise<{ ok: boolean; status: string; error?: string }> {
+  await requireRoleAction("ADMIN", "EMPLOYEE");
+  const demo = await prisma.demo.findUnique({ where: { id } });
+  if (!demo) return { ok: false, status: "Error", error: "Demo not found." };
+  const res = await runDemoPipeline(id);
+  revalidatePath("/admin/leads");
+  revalidatePath("/staff/leads");
+  return res;
 }
 
 export async function deleteDemo(id: string): Promise<Result> {
