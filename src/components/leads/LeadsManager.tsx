@@ -15,6 +15,7 @@ import {
 } from "@/server/leads";
 import { scoreLead } from "@/lib/lead-scoring";
 import { CsvImportPanel } from "./CsvImportPanel";
+import { FindLeadsPanel } from "./FindLeadsPanel";
 
 export type DemoView = {
   id: string;
@@ -99,6 +100,8 @@ export function LeadsManager({ demos, basePath }: { demos: DemoView[]; basePath:
 
   return (
     <div className="space-y-8">
+      {isAdmin && <FindLeadsPanel />}
+
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="card p-6">
           <h2 className="mb-1 text-lg font-600 text-navy">Generate a sample site</h2>

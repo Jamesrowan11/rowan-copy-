@@ -199,6 +199,17 @@ show in the table with an `Imported` badge; generate them individually or with
 **Generate all imported**, which runs the same in-process pipeline sequentially
 (one at a time, with a short delay) to control API cost and avoid rate limits.
 
+**Find leads (Google Places).** Admins also get a **Find leads** panel that
+searches the **Google Places API (New)** by city + category, shows which
+businesses have **no website** (the hottest leads), and imports them as scored
+draft demos after a preview/confirm step — same dedupe (businessName + city) and
+scoring as CSV import; never auto-generated. `GOOGLE_PLACES_API_KEY` is
+server-side only. Cost is hard-capped in code: one Text Search call per find, a
+tight field mask (`displayName, formattedAddress, websiteUri,
+nationalPhoneNumber, primaryType`), ≤20 results, and a per-day search limit
+(`placesSearch.dailyLimit` AppSetting, default 50) that blocks before calling
+Google. Admin-only — it spends money.
+
 The CSV needs a **header row**; only `businessName` must be mappable. Quoted
 fields, commas inside values, and `""` escapes are handled. A working example is
 in [`leads-sample.csv`](./leads-sample.csv):

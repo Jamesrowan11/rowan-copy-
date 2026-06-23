@@ -10,6 +10,7 @@ import { teardownSubdomain } from "@/lib/deploy";
 import { runDemoPipeline, safeError } from "@/lib/demo-pipeline";
 import { parseCsv, guessMapping, IMPORT_FIELDS, type ImportField } from "@/lib/csv";
 import { scoreLead } from "@/lib/lead-scoring";
+import { searchPlaces, placesConfigured, PLACES_HARD_CAP } from "@/lib/places";
 import crypto from "crypto";
 
 type Result = { ok: boolean; error?: string };
@@ -243,6 +244,229 @@ export async function importCsv(
   revalidatePath("/admin/leads");
   revalidatePath("/staff/leads");
   return { ok: true, imported: toCreate.length, skippedDuplicate, skippedNoName };
+}
+
+// --------------------------------------------------------------------------
+// Google Places lead-finder (ADMIN only — it spends money)
+// --------------------------------------------------------------------------
+
+const DEFAULT_DAILY_SEARCH_LIMIT = 50;
+const DAILY_LIMIT_KEY = "placesSearch.dailyLimit";
+
+function todayKey(): string {
+  return `placesSearch.count.${new Date().toISOString().slice(0, 10)}`;
+}
+
+async function getDailyLimit(): Promise<number> {
+  const s = await prisma.appSetting.findUnique({ where: { key: DAILY_LIMIT_KEY } });
+  const n = s ? parseInt(s.value, 10) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_DAILY_SEARCH_LIMIT;
+}
+
+async function getDailyUsed(): Promise<number> {
+  const s = await prisma.appSetting.findUnique({ where: { key: todayKey() } });
+  const n = s ? parseInt(s.value, 10) : 0;
+  return Number.isFinite(n) ? n : 0;
+}
+
+export type FoundLeadView = {
+  businessName: string;
+  city: string;
+  industry: string;
+  currentWebsite: string;
+  phone: string;
+  address: string;
+  score: number;
+  tier: string;
+};
+
+export type FindLeadsResult = {
+  ok: boolean;
+  error?: string;
+  leads?: FoundLeadView[];
+  count?: number;
+  searchesRemaining?: number;
+};
+
+const findSchema = z.object({
+  city: z.string().trim().min(1, "Enter a city or area.").max(120),
+  category: z.string().trim().min(1, "Enter a business category.").max(120),
+  max: z.coerce.number().int().min(1).max(PLACES_HARD_CAP),
+});
+
+/** Find local businesses via Google Places (New) Text Search. Preview only — does NOT save. */
+export async function findLeads(
+  _prev: FindLeadsResult,
+  formData: FormData,
+): Promise<FindLeadsResult> {
+  const admin = await requireRoleAction("ADMIN"); // ADMIN only — it spends money
+
+  const parsed = findSchema.safeParse({
+    city: formData.get("city"),
+    category: formData.get("category"),
+    max: formData.get("max"),
+  });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message || "Check the fields." };
+  }
+  const { city, category, max } = parsed.data;
+
+  if (!placesConfigured()) {
+    return { ok: false, error: "Lead-finder isn't configured (no GOOGLE_PLACES_API_KEY on the server)." };
+  }
+
+  // HARD per-day cap — block BEFORE calling (and paying) Google.
+  const limit = await getDailyLimit();
+  const used = await getDailyUsed();
+  if (used >= limit) {
+    return { ok: false, error: `Daily search limit reached (${limit}/day). Try again tomorrow or raise the limit.` };
+  }
+
+  let found;
+  try {
+    // Hard cap on results enforced inside searchPlaces (min(max, 20), one call).
+    found = await searchPlaces(city, category, Math.min(max, PLACES_HARD_CAP));
+  } catch (err) {
+    console.error("[findLeads] places error:", safeError(err));
+    return { ok: false, error: "Couldn't reach Google Places. Check the API key and try again." };
+  }
+
+  // Count the billable call (only after it succeeded).
+  await prisma.appSetting.upsert({
+    where: { key: todayKey() },
+    create: { key: todayKey(), value: "1" },
+    update: { value: String(used + 1) },
+  });
+
+  await audit({
+    actorId: admin.id,
+    action: "use",
+    entityType: "Demo",
+    summary: `Places search: "${category}" in "${city}" (${found.length} result(s), max ${max})`,
+  });
+
+  const leads: FoundLeadView[] = found.map((f) => {
+    const s = scoreLead({
+      businessName: f.businessName,
+      city,
+      industry: category,
+      email: "",
+      currentWebsite: f.currentWebsite || null,
+    });
+    return {
+      businessName: f.businessName,
+      city,
+      industry: category,
+      currentWebsite: f.currentWebsite,
+      phone: f.phone,
+      address: f.address,
+      score: s.score,
+      tier: s.tier,
+    };
+  });
+
+  return {
+    ok: true,
+    leads,
+    count: leads.length,
+    searchesRemaining: Math.max(0, limit - (used + 1)),
+  };
+}
+
+const importFoundSchema = z.object({
+  city: z.string().trim().min(1).max(120),
+  category: z.string().trim().min(1).max(120),
+  leads: z
+    .array(
+      z.object({
+        businessName: z.string().trim().min(1).max(200),
+        currentWebsite: z.string().trim().max(500).optional().default(""),
+        phone: z.string().trim().max(80).optional().default(""),
+        address: z.string().trim().max(400).optional().default(""),
+      }),
+    )
+    .min(1)
+    .max(PLACES_HARD_CAP), // hard cap on what can be imported in one go
+});
+
+/** Save previewed found leads as draft Demos (status "Imported"), deduped + scored. */
+export async function importFoundLeads(
+  _prev: CsvImportResult,
+  formData: FormData,
+): Promise<CsvImportResult> {
+  const me = await requireRoleAction("ADMIN");
+
+  let payload: unknown;
+  try {
+    payload = {
+      city: formData.get("city"),
+      category: formData.get("category"),
+      leads: JSON.parse(String(formData.get("leads") || "[]")),
+    };
+  } catch {
+    return { ok: false, error: "Could not read the found leads." };
+  }
+  const parsed = importFoundSchema.safeParse(payload);
+  if (!parsed.success) return { ok: false, error: "No valid leads to import." };
+  const { city, category, leads } = parsed.data;
+
+  const existing = await prisma.demo.findMany({ select: { businessName: true, city: true } });
+  const seen = new Set(
+    existing.map((d) => `${d.businessName.trim().toLowerCase()}|${(d.city || "").trim().toLowerCase()}`),
+  );
+
+  let skippedDuplicate = 0;
+  const toCreate: {
+    businessName: string;
+    city: string;
+    industry: string;
+    email: string;
+    currentWebsite: string | null;
+    status: string;
+    score: number;
+    tier: string;
+    createdById: string;
+  }[] = [];
+
+  for (const lead of leads) {
+    const key = `${lead.businessName.toLowerCase()}|${city.toLowerCase()}`;
+    if (seen.has(key)) {
+      skippedDuplicate++;
+      continue;
+    }
+    seen.add(key);
+    const currentWebsite = lead.currentWebsite || null;
+    const scored = scoreLead({
+      businessName: lead.businessName,
+      city,
+      industry: category,
+      email: "",
+      currentWebsite,
+    });
+    toCreate.push({
+      businessName: lead.businessName,
+      city,
+      industry: category,
+      email: "",
+      currentWebsite,
+      status: "Imported",
+      score: scored.score,
+      tier: scored.tier,
+      createdById: me.id,
+    });
+  }
+
+  if (toCreate.length) await prisma.demo.createMany({ data: toCreate });
+
+  await audit({
+    actorId: me.id,
+    action: "create",
+    entityType: "Demo",
+    summary: `Imported ${toCreate.length} lead(s) from Google Places "${category}" in "${city}" (skipped ${skippedDuplicate} duplicate)`,
+  });
+
+  revalidatePath("/admin/leads");
+  return { ok: true, imported: toCreate.length, skippedDuplicate, skippedNoName: 0 };
 }
 
 // --------------------------------------------------------------------------
