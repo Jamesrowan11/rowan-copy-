@@ -7,6 +7,7 @@ import { requireRoleAction } from "@/lib/authz";
 import { audit } from "@/lib/audit";
 import { hashPassword } from "@/lib/password";
 import { teardownSubdomain } from "@/lib/deploy";
+import { runDemoPipeline } from "@/lib/demo-pipeline";
 import crypto from "crypto";
 
 type Result = { ok: boolean; error?: string };
@@ -14,25 +15,19 @@ type ConvertResult = Result & { projectId?: string };
 const OK: Result = { ok: true };
 const fail = (error: string): Result => ({ ok: false, error });
 
-// The background job is triggered by the server calling its OWN run route. This
-// must go over LOCAL HTTP (loopback), NOT the public HTTPS host — a self-call to
-// https://rowancopy.com fails TLS validation when the server's certificate is for
-// a different hostname (ERR_TLS_CERT_ALTNAME_INVALID), which would leave demos
-// stuck on "Queued" forever. APP_URL / NEXTAUTH_URL are left for browser-facing
-// links; only this internal self-call uses INTERNAL_BASE_URL.
-const internalBaseUrl = process.env.INTERNAL_BASE_URL || "http://127.0.0.1:3000";
-
-/** Fire-and-forget trigger of the background demo processor over loopback HTTP. */
-function triggerDemoRun(demoId: string): void {
-  const url = `${internalBaseUrl}/api/demos/${demoId}/run`;
-  void fetch(url, {
-    method: "POST",
-    headers: { "x-internal-secret": process.env.INBOUND_WEBHOOK_SECRET || "" },
-  }).catch((err) => {
-    console.error(
-      `[leadgen] failed to trigger ${url} for demo ${demoId} — it will stay Queued until retried:`,
-      err,
-    );
+/**
+ * Run the demo pipeline IN-PROCESS as a background task (do not await). Phusion
+ * Passenger doesn't expose a TCP port, so the old internal HTTP self-call was
+ * refused (ECONNREFUSED) — running the work directly avoids any self-call. The
+ * pipeline owns the Demo's status transitions and never throws; the extra
+ * .catch is belt-and-suspenders so a rejection can never crash the action.
+ */
+function startDemoPipeline(demoId: string): void {
+  void runDemoPipeline(demoId).catch((err) => {
+    console.error(`[leadgen] pipeline crashed for demo ${demoId}:`, err);
+    prisma.demo
+      .update({ where: { id: demoId }, data: { status: "Error" } })
+      .catch(() => {});
   });
 }
 
@@ -79,9 +74,9 @@ export async function createDemo(_prev: Result, formData: FormData): Promise<Res
   });
 
   // Kick off background processing WITHOUT blocking the response (research +
-  // deploy can take 30-90s). Goes over loopback HTTP; the route is gated by
-  // INBOUND_WEBHOOK_SECRET. A trigger failure is logged, never thrown.
-  triggerDemoRun(demo.id);
+  // deploy can take 30-90s). Runs in-process — no self-HTTP-call (which Passenger
+  // refuses). The action returns immediately; the demo finishes in the background.
+  startDemoPipeline(demo.id);
 
   revalidatePath("/admin/leads");
   revalidatePath("/staff/leads");
