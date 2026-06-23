@@ -9,6 +9,8 @@ import {
   type FindLeadsResult,
   type FoundLeadView,
 } from "@/server/leads";
+import { SEARCH_RADII_MILES } from "@/lib/places-config";
+import { websiteStatus } from "@/lib/website-quality";
 
 type Step = "search" | "preview" | "done";
 
@@ -19,7 +21,10 @@ export function FindLeadsPanel() {
   const [city, setCity] = useState("");
   const [category, setCategory] = useState("");
   const [max, setMax] = useState("10");
+  const [radius, setRadius] = useState("5");
+  const [quality, setQuality] = useState<"best" | "all">("best");
   const [leads, setLeads] = useState<FoundLeadView[]>([]);
+  const [stats, setStats] = useState<{ found: number; passed: number; quality: "best" | "all" }>({ found: 0, passed: 0, quality: "best" });
   const [remaining, setRemaining] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ imported: number; skippedDuplicate: number } | null>(null);
@@ -31,12 +36,15 @@ export function FindLeadsPanel() {
       fd.set("city", city);
       fd.set("category", category);
       fd.set("max", max);
+      fd.set("radius", radius);
+      fd.set("quality", quality);
       const res: FindLeadsResult = await findLeads({ ok: false }, fd);
       if (!res.ok) {
         setError(res.error || "Search failed.");
         return;
       }
       setLeads(res.leads || []);
+      setStats({ found: res.found ?? 0, passed: res.passed ?? (res.leads?.length || 0), quality: res.quality ?? quality });
       setRemaining(res.searchesRemaining ?? null);
       setStep("preview");
     });
@@ -91,12 +99,30 @@ export function FindLeadsPanel() {
         <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="label" htmlFor="fl-city">City / area</label>
-              <input id="fl-city" className="input" value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Columbia, MD" />
+              <label className="label" htmlFor="fl-city">Center location</label>
+              <input id="fl-city" className="input" value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Clarksville, MD" />
+              <p className="mt-1 text-xs text-navy-400">Search center (also saved as each lead&apos;s city).</p>
             </div>
             <div>
               <label className="label" htmlFor="fl-cat">Category</label>
               <input id="fl-cat" className="input" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. HVAC, dentist, salon" />
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="label" htmlFor="fl-radius">Radius</label>
+              <select id="fl-radius" className="input" value={radius} onChange={(e) => setRadius(e.target.value)}>
+                {SEARCH_RADII_MILES.map((mi) => (
+                  <option key={mi} value={mi}>{mi} mile{mi === 1 ? "" : "s"}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label" htmlFor="fl-quality">Lead quality</label>
+              <select id="fl-quality" className="input" value={quality} onChange={(e) => setQuality(e.target.value as "best" | "all")}>
+                <option value="best">Best targets only (no/weak website)</option>
+                <option value="all">All businesses</option>
+              </select>
             </div>
           </div>
           <div className="flex flex-wrap items-end gap-3">
@@ -111,6 +137,9 @@ export function FindLeadsPanel() {
               {pending ? "Searching…" : "Find leads"}
             </button>
           </div>
+          <p className="text-xs text-navy-400">
+            Each search is one paid Text Search call (max 20 results); radii over 31 miles widen the area beyond Google&apos;s precise circle.
+          </p>
         </div>
       )}
 
@@ -118,15 +147,20 @@ export function FindLeadsPanel() {
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-navy-600">
-              Found <strong>{leads.length}</strong> business{leads.length === 1 ? "" : "es"} for
-              <strong> {category}</strong> in <strong>{city}</strong>.
+              {stats.quality === "best" ? (
+                <>Found <strong>{stats.found}</strong>, <strong>{stats.passed}</strong> {stats.passed === 1 ? "is a best target" : "are best targets"}</>
+              ) : (
+                <>Found <strong>{stats.found}</strong> business{stats.found === 1 ? "" : "es"}</>
+              )}{" "}for <strong>{category}</strong> near <strong>{city}</strong>.
               {remaining != null && <span className="text-navy-400"> {remaining} search{remaining === 1 ? "" : "es"} left today.</span>}
             </p>
           </div>
 
           {leads.length === 0 ? (
             <p className="rounded-lg border border-navy-100 bg-navy-50/40 px-3 py-2 text-sm text-navy-500">
-              No businesses found. Try a broader category or area.
+              {stats.found > 0
+                ? "Businesses were found, but none are best targets (all have real websites). Switch to “All businesses” to see them."
+                : "No businesses found. Try a broader category, area, or radius."}
             </p>
           ) : (
             <ul className="max-h-72 space-y-2 overflow-y-auto pr-1">
@@ -143,11 +177,12 @@ export function FindLeadsPanel() {
                     </div>
                   </div>
                   <div className="mt-1.5">
-                    {l.currentWebsite ? (
-                      <span className="badge bg-navy-100 text-navy-500">Has website</span>
-                    ) : (
-                      <span className="badge bg-accent text-white">No website — hot</span>
-                    )}
+                    {(() => {
+                      const s = websiteStatus(l.currentWebsite);
+                      if (s === "none") return <span className="badge bg-accent text-white">No website — hot</span>;
+                      if (s === "weak") return <span className="badge bg-amber-100 text-amber-700">Weak site — good</span>;
+                      return <span className="badge bg-navy-100 text-navy-500">Has website</span>;
+                    })()}
                   </div>
                 </li>
               ))}

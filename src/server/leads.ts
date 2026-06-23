@@ -10,7 +10,9 @@ import { teardownSubdomain } from "@/lib/deploy";
 import { runDemoPipeline, safeError } from "@/lib/demo-pipeline";
 import { parseCsv, guessMapping, IMPORT_FIELDS, type ImportField } from "@/lib/csv";
 import { scoreLead } from "@/lib/lead-scoring";
-import { searchPlaces, placesConfigured, PLACES_HARD_CAP } from "@/lib/places";
+import { searchPlaces, placesConfigured } from "@/lib/places";
+import { PLACES_HARD_CAP, SEARCH_RADII_MILES } from "@/lib/places-config";
+import { isBestTarget } from "@/lib/website-quality";
 import crypto from "crypto";
 
 type Result = { ok: boolean; error?: string };
@@ -284,7 +286,9 @@ export type FindLeadsResult = {
   ok: boolean;
   error?: string;
   leads?: FoundLeadView[];
-  count?: number;
+  found?: number; // total returned by Google
+  passed?: number; // how many survived the quality filter (== leads.length)
+  quality?: "best" | "all";
   searchesRemaining?: number;
 };
 
@@ -292,6 +296,11 @@ const findSchema = z.object({
   city: z.string().trim().min(1, "Enter a city or area.").max(120),
   category: z.string().trim().min(1, "Enter a business category.").max(120),
   max: z.coerce.number().int().min(1).max(PLACES_HARD_CAP),
+  radius: z.coerce
+    .number()
+    .refine((v) => SEARCH_RADII_MILES.includes(v), "Pick a valid radius.")
+    .default(5),
+  quality: z.enum(["best", "all"]).default("best"),
 });
 
 /** Find local businesses via Google Places (New) Text Search. Preview only — does NOT save. */
@@ -305,11 +314,13 @@ export async function findLeads(
     city: formData.get("city"),
     category: formData.get("category"),
     max: formData.get("max"),
+    radius: formData.get("radius") ?? undefined,
+    quality: formData.get("quality") ?? undefined,
   });
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message || "Check the fields." };
   }
-  const { city, category, max } = parsed.data;
+  const { city, category, max, radius, quality } = parsed.data;
 
   if (!placesConfigured()) {
     return { ok: false, error: "Lead-finder isn't configured (no GOOGLE_PLACES_API_KEY on the server)." };
@@ -325,7 +336,9 @@ export async function findLeads(
   let found;
   try {
     // Hard cap on results enforced inside searchPlaces (min(max, 20), one call).
-    found = await searchPlaces(city, category, Math.min(max, PLACES_HARD_CAP));
+    // The radius narrows the AREA via a locationBias circle — it never raises
+    // the result cap or the call count.
+    found = await searchPlaces(city, category, Math.min(max, PLACES_HARD_CAP), radius);
   } catch (err) {
     console.error("[findLeads] places error:", safeError(err));
     return { ok: false, error: "Couldn't reach Google Places. Check the API key and try again." };
@@ -338,14 +351,20 @@ export async function findLeads(
     update: { value: String(used + 1) },
   });
 
+  const foundCount = found.length;
+
+  // QUALITY FILTER applied to the preview, so only worth-pitching leads are ever
+  // shown/imported. "best" keeps no-website + weak/basic-site businesses.
+  const passing = quality === "best" ? found.filter((f) => isBestTarget(f.currentWebsite)) : found;
+
   await audit({
     actorId: admin.id,
     action: "use",
     entityType: "Demo",
-    summary: `Places search: "${category}" in "${city}" (${found.length} result(s), max ${max})`,
+    summary: `Places search: "${category}" within ${radius}mi of "${city}" — ${foundCount} found, ${passing.length} ${quality === "best" ? "best targets" : "kept"} (max ${max})`,
   });
 
-  const leads: FoundLeadView[] = found.map((f) => {
+  const leads: FoundLeadView[] = passing.map((f) => {
     const s = scoreLead({
       businessName: f.businessName,
       city,
@@ -368,7 +387,9 @@ export async function findLeads(
   return {
     ok: true,
     leads,
-    count: leads.length,
+    found: foundCount,
+    passed: leads.length,
+    quality,
     searchesRemaining: Math.max(0, limit - (used + 1)),
   };
 }

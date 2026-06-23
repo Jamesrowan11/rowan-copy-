@@ -11,9 +11,12 @@ export type FoundLead = {
   primaryType: string;
 };
 
-// Absolute hard cap regardless of caller input — one Text Search returns at
-// most 20 results and we never paginate.
-export const PLACES_HARD_CAP = 20;
+import { PLACES_HARD_CAP, MAX_CIRCLE_METERS } from "@/lib/places-config";
+
+// Re-export so existing server-side importers of "@/lib/places" keep working.
+export { PLACES_HARD_CAP, MAX_CIRCLE_METERS };
+
+const METERS_PER_MILE = 1609.344;
 
 // Only the fields we actually use. Requesting more raises the billing SKU.
 const FIELD_MASK = [
@@ -28,19 +31,71 @@ export function placesConfigured(): boolean {
   return !!process.env.GOOGLE_PLACES_API_KEY;
 }
 
+// --- Geocoding (for the radius circle) -----------------------------------
+// Resolve a center location to lat/lng so we can pass a locationBias circle.
+// Best-effort: returns null on any failure so the search still runs (query-only).
+async function geocodeCenter(
+  location: string,
+): Promise<{ latitude: number; longitude: number } | null> {
+  const key = process.env.GOOGLE_PLACES_API_KEY;
+  if (!key) return null;
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(location)}&key=${key}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      results?: { geometry?: { location?: { lat?: number; lng?: number } } }[];
+    };
+    const loc = data.results?.[0]?.geometry?.location;
+    if (loc && typeof loc.lat === "number" && typeof loc.lng === "number") {
+      return { latitude: loc.lat, longitude: loc.lng };
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 /**
  * One Text Search call. Returns up to `max` results (clamped to PLACES_HARD_CAP).
- * Throws on a missing key or a Google error — the caller decides how to surface it.
+ * When `radiusMiles` is given and within Google's circle limit, the search is
+ * biased to a circle around `area` (the radius narrows the area — it never
+ * raises the result cap or the call count). Throws on a missing key or a Google
+ * error — the caller decides how to surface it.
  */
 export async function searchPlaces(
-  city: string,
+  area: string,
   category: string,
   max: number,
+  radiusMiles?: number,
 ): Promise<FoundLead[]> {
   const key = process.env.GOOGLE_PLACES_API_KEY;
   if (!key) throw new Error("GOOGLE_PLACES_API_KEY is not set on the server.");
 
   const cap = Math.min(Math.max(1, Math.floor(max) || 1), PLACES_HARD_CAP);
+
+  const body: {
+    textQuery: string;
+    maxResultCount: number;
+    locationBias?: { circle: { center: { latitude: number; longitude: number }; radius: number } };
+  } = {
+    textQuery: `${category} in ${area}`,
+    maxResultCount: cap, // single call, no pagination beyond the cap
+  };
+
+  // Add a circular location bias when a radius is requested and within Google's
+  // 50 km circle limit. Larger radii stay query-biased (wider search).
+  if (radiusMiles && Number.isFinite(radiusMiles) && radiusMiles > 0) {
+    const meters = Math.round(radiusMiles * METERS_PER_MILE);
+    if (meters <= MAX_CIRCLE_METERS) {
+      const center = await geocodeCenter(area);
+      if (center) body.locationBias = { circle: { center, radius: meters } };
+    }
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
@@ -53,10 +108,7 @@ export async function searchPlaces(
         "X-Goog-Api-Key": key,
         "X-Goog-FieldMask": FIELD_MASK,
       },
-      body: JSON.stringify({
-        textQuery: `${category} in ${city}`,
-        maxResultCount: cap, // single call, no pagination beyond the cap
-      }),
+      body: JSON.stringify(body),
       signal: controller.signal,
     });
   } finally {
@@ -64,9 +116,9 @@ export async function searchPlaces(
   }
 
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
+    const errBody = await res.text().catch(() => "");
     // body is Google's error message (no API key in it).
-    throw new Error(`Places API error ${res.status}: ${body.slice(0, 200)}`);
+    throw new Error(`Places API error ${res.status}: ${errBody.slice(0, 200)}`);
   }
 
   const data = (await res.json()) as { places?: unknown[] };
