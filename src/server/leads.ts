@@ -14,7 +14,27 @@ type ConvertResult = Result & { projectId?: string };
 const OK: Result = { ok: true };
 const fail = (error: string): Result => ({ ok: false, error });
 
-const appUrl = process.env.APP_URL || "http://localhost:3000";
+// The background job is triggered by the server calling its OWN run route. This
+// must go over LOCAL HTTP (loopback), NOT the public HTTPS host — a self-call to
+// https://rowancopy.com fails TLS validation when the server's certificate is for
+// a different hostname (ERR_TLS_CERT_ALTNAME_INVALID), which would leave demos
+// stuck on "Queued" forever. APP_URL / NEXTAUTH_URL are left for browser-facing
+// links; only this internal self-call uses INTERNAL_BASE_URL.
+const internalBaseUrl = process.env.INTERNAL_BASE_URL || "http://127.0.0.1:3000";
+
+/** Fire-and-forget trigger of the background demo processor over loopback HTTP. */
+function triggerDemoRun(demoId: string): void {
+  const url = `${internalBaseUrl}/api/demos/${demoId}/run`;
+  void fetch(url, {
+    method: "POST",
+    headers: { "x-internal-secret": process.env.INBOUND_WEBHOOK_SECRET || "" },
+  }).catch((err) => {
+    console.error(
+      `[leadgen] failed to trigger ${url} for demo ${demoId} — it will stay Queued until retried:`,
+      err,
+    );
+  });
+}
 
 const demoSchema = z.object({
   businessName: z.string().trim().min(1, "Business name is required.").max(160),
@@ -59,11 +79,9 @@ export async function createDemo(_prev: Result, formData: FormData): Promise<Res
   });
 
   // Kick off background processing WITHOUT blocking the response (research +
-  // deploy can take 30-90s). The route is gated by INBOUND_WEBHOOK_SECRET.
-  void fetch(`${appUrl}/api/demos/${demo.id}/run`, {
-    method: "POST",
-    headers: { "x-internal-secret": process.env.INBOUND_WEBHOOK_SECRET || "" },
-  }).catch((err) => console.error("[createDemo] trigger failed:", err));
+  // deploy can take 30-90s). Goes over loopback HTTP; the route is gated by
+  // INBOUND_WEBHOOK_SECRET. A trigger failure is logged, never thrown.
+  triggerDemoRun(demo.id);
 
   revalidatePath("/admin/leads");
   revalidatePath("/staff/leads");
