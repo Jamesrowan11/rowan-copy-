@@ -11,7 +11,9 @@ import {
   deleteDemo,
   generateDemo,
   generateDemoNow,
+  scoreAllUnscored,
 } from "@/server/leads";
+import { scoreLead } from "@/lib/lead-scoring";
 import { CsvImportPanel } from "./CsvImportPanel";
 
 export type DemoView = {
@@ -25,13 +27,24 @@ export type DemoView = {
   emailSubject: string | null;
   emailBody: string | null;
   foundExistingSite: boolean | null;
+  currentWebsite: string | null;
+  researchSummary: string | null;
+  score: number | null;
+  tier: string | null;
   convertedProjectId: string | null;
   createdAt: string;
 };
 
+type TierFilter = "all" | "Hot" | "Warm" | "Cold";
+
 export function LeadsManager({ demos, basePath }: { demos: DemoView[]; basePath: string }) {
   const router = useRouter();
+  const isAdmin = basePath === "/admin";
   const [genAll, setGenAll] = useState<{ done: number; total: number } | null>(null);
+  const [sortByScore, setSortByScore] = useState(true);
+  const [tierFilter, setTierFilter] = useState<TierFilter>("all");
+  const [scoring, setScoring] = useState(false);
+  const [, startScore] = useTransition();
 
   // Auto-refresh while any demo is still being researched/built so a
   // "Building" row flips to "Ready" without a manual reload.
@@ -43,6 +56,26 @@ export function LeadsManager({ demos, basePath }: { demos: DemoView[]; basePath:
   }, [inProgress, genAll, router]);
 
   const importedCount = demos.filter((d) => d.status === "Imported").length;
+  const unscoredCount = demos.filter((d) => d.score == null).length;
+
+  // Filter by tier, then sort (highest score first by default).
+  const visibleDemos = demos
+    .filter((d) => tierFilter === "all" || d.tier === tierFilter)
+    .slice()
+    .sort((a, b) =>
+      sortByScore
+        ? (b.score ?? -1) - (a.score ?? -1)
+        : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+
+  function backfillScores() {
+    setScoring(true);
+    startScore(async () => {
+      await scoreAllUnscored();
+      setScoring(false);
+      router.refresh();
+    });
+  }
 
   // Generate every imported demo SEQUENTIALLY with a short delay between each
   // (not all at once) to control API cost and avoid rate limits.
@@ -90,19 +123,44 @@ export function LeadsManager({ demos, basePath }: { demos: DemoView[]; basePath:
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-600 text-navy">Demos</h2>
-          {importedCount > 0 && (
-            <button
-              type="button"
-              className="btn-primary btn-sm"
-              disabled={!!genAll}
-              onClick={generateAllImported}
-            >
-              {genAll
-                ? `Generating ${genAll.done} of ${genAll.total}…`
-                : `Generate all imported (${importedCount})`}
-            </button>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {isAdmin && unscoredCount > 0 && (
+              <button type="button" className="btn-outline btn-sm" disabled={scoring} onClick={backfillScores}>
+                {scoring ? "Scoring…" : `Score all unscored (${unscoredCount})`}
+              </button>
+            )}
+            {importedCount > 0 && (
+              <button type="button" className="btn-primary btn-sm" disabled={!!genAll} onClick={generateAllImported}>
+                {genAll ? `Generating ${genAll.done} of ${genAll.total}…` : `Generate all imported (${importedCount})`}
+              </button>
+            )}
+          </div>
         </div>
+
+        {demos.length > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-3 text-sm">
+            <label className="flex items-center gap-2 text-navy-600">
+              <span>Tier</span>
+              <select
+                className="input !w-auto !py-1.5"
+                value={tierFilter}
+                onChange={(e) => setTierFilter(e.target.value as TierFilter)}
+              >
+                <option value="all">All</option>
+                <option value="Hot">Hot</option>
+                <option value="Warm">Warm</option>
+                <option value="Cold">Cold</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-navy-600">
+              <input type="checkbox" className="rounded" checked={sortByScore} onChange={(e) => setSortByScore(e.target.checked)} />
+              Sort by score (highest first)
+            </label>
+            <span className="ml-auto text-xs text-navy-400">
+              Showing {visibleDemos.length} of {demos.length}
+            </span>
+          </div>
+        )}
 
         {genAll && (
           <div className="mb-3 h-2 w-full overflow-hidden rounded-full bg-navy-100">
@@ -115,9 +173,11 @@ export function LeadsManager({ demos, basePath }: { demos: DemoView[]; basePath:
 
         {demos.length === 0 ? (
           <EmptyState>No demos yet. Generate one above, or import a CSV.</EmptyState>
+        ) : visibleDemos.length === 0 ? (
+          <EmptyState>No demos match this filter.</EmptyState>
         ) : (
           <div className="space-y-3">
-            {demos.map((d) => (
+            {visibleDemos.map((d) => (
               <DemoRow key={d.id} demo={d} basePath={basePath} />
             ))}
           </div>
@@ -154,7 +214,15 @@ function DemoRow({ demo, basePath }: { demo: DemoView; basePath: string }) {
             </a>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {demo.tier && (
+            <span className="inline-flex items-center gap-1">
+              <StatusBadge status={demo.tier} />
+              {demo.score != null && (
+                <span className="text-sm font-700 text-navy">{demo.score}</span>
+              )}
+            </span>
+          )}
           {demo.convertedProjectId ? (
             <StatusBadge status="Converted" />
           ) : (
@@ -163,6 +231,8 @@ function DemoRow({ demo, basePath }: { demo: DemoView; basePath: string }) {
           {busy && <Spinner />}
         </div>
       </div>
+
+      {demo.tier && <ScoreReasons demo={demo} />}
 
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-navy-100 pt-3">
         {canGenerate && (
@@ -237,6 +307,32 @@ function DemoRow({ demo, basePath }: { demo: DemoView; basePath: string }) {
         </details>
       )}
     </div>
+  );
+}
+
+function ScoreReasons({ demo }: { demo: DemoView }) {
+  // Recompute reasons from the same pure function & the same inputs used to
+  // store the score, so the explanation always matches the displayed number.
+  const { reasons } = scoreLead({
+    businessName: demo.businessName,
+    city: demo.city,
+    industry: demo.industry,
+    email: demo.email,
+    currentWebsite: demo.currentWebsite,
+    foundExistingSite: demo.foundExistingSite,
+    researchSummary: demo.researchSummary,
+  });
+  return (
+    <details className="mt-2 text-sm">
+      <summary className="cursor-pointer text-xs font-600 text-navy-500 hover:text-navy">
+        Why this score?
+      </summary>
+      <ul className="mt-2 list-disc space-y-1 pl-5 text-navy-600">
+        {reasons.map((r, i) => (
+          <li key={i}>{r}</li>
+        ))}
+      </ul>
+    </details>
   );
 }
 

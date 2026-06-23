@@ -9,6 +9,7 @@ import { hashPassword } from "@/lib/password";
 import { teardownSubdomain } from "@/lib/deploy";
 import { runDemoPipeline, safeError } from "@/lib/demo-pipeline";
 import { parseCsv, guessMapping, IMPORT_FIELDS, type ImportField } from "@/lib/csv";
+import { scoreLead } from "@/lib/lead-scoring";
 import crypto from "crypto";
 
 type Result = { ok: boolean; error?: string };
@@ -55,6 +56,15 @@ export async function createDemo(_prev: Result, formData: FormData): Promise<Res
   }
   const d = parsed.data;
 
+  // Score from the form details up front (re-scored after research runs).
+  const scored = scoreLead({
+    businessName: d.businessName,
+    city: d.city,
+    industry: d.industry,
+    email: d.email,
+    currentWebsite: d.currentWebsite || null,
+  });
+
   const demo = await prisma.demo.create({
     data: {
       businessName: d.businessName,
@@ -63,6 +73,8 @@ export async function createDemo(_prev: Result, formData: FormData): Promise<Res
       email: d.email.toLowerCase(),
       currentWebsite: d.currentWebsite || null,
       status: "Queued",
+      score: scored.score,
+      tier: scored.tier,
       createdById: me.id,
     },
   });
@@ -183,6 +195,8 @@ export async function importCsv(
     email: string;
     currentWebsite: string | null;
     status: string;
+    score: number;
+    tier: string;
     createdById: string;
   }[] = [];
 
@@ -200,13 +214,19 @@ export async function importCsv(
       continue;
     }
     seen.add(key);
+    const industry = get(row, colIdx.industry);
+    const email = get(row, colIdx.email).toLowerCase();
+    const currentWebsite = get(row, colIdx.currentWebsite) || null;
+    const scored = scoreLead({ businessName, city, industry, email, currentWebsite });
     toCreate.push({
       businessName,
       city,
-      industry: get(row, colIdx.industry),
-      email: get(row, colIdx.email).toLowerCase(),
-      currentWebsite: get(row, colIdx.currentWebsite) || null,
+      industry,
+      email,
+      currentWebsite,
       status: "Imported",
+      score: scored.score,
+      tier: scored.tier,
       createdById: me.id,
     });
   }
@@ -223,6 +243,42 @@ export async function importCsv(
   revalidatePath("/admin/leads");
   revalidatePath("/staff/leads");
   return { ok: true, imported: toCreate.length, skippedDuplicate, skippedNoName };
+}
+
+// --------------------------------------------------------------------------
+// Scoring backfill
+// --------------------------------------------------------------------------
+
+/** Backfill score + tier for any demos that don't have a score yet (admin-only). */
+export async function scoreAllUnscored(): Promise<Result & { scored?: number }> {
+  const admin = await requireRoleAction("ADMIN");
+  const unscored = await prisma.demo.findMany({ where: { score: null } });
+  let scoredCount = 0;
+  for (const demo of unscored) {
+    const scored = scoreLead({
+      businessName: demo.businessName,
+      city: demo.city,
+      industry: demo.industry,
+      email: demo.email,
+      currentWebsite: demo.currentWebsite,
+      foundExistingSite: demo.foundExistingSite,
+      researchSummary: demo.researchSummary,
+    });
+    await prisma.demo.update({
+      where: { id: demo.id },
+      data: { score: scored.score, tier: scored.tier },
+    });
+    scoredCount++;
+  }
+  await audit({
+    actorId: admin.id,
+    action: "update",
+    entityType: "Demo",
+    summary: `Backfilled lead scores for ${scoredCount} unscored demo(s)`,
+  });
+  revalidatePath("/admin/leads");
+  revalidatePath("/staff/leads");
+  return { ok: true, scored: scoredCount };
 }
 
 // --------------------------------------------------------------------------

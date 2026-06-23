@@ -28,6 +28,10 @@ export default async function AdminLeadsPage() {
           emailSubject: d.emailSubject,
           emailBody: d.emailBody,
           foundExistingSite: d.foundExistingSite,
+          currentWebsite: d.currentWebsite,
+          researchSummary: d.researchSummary,
+          score: d.score,
+          tier: d.tier,
           convertedProjectId: d.convertedProjectId,
           createdAt: d.createdAt.toISOString(),
         }))}

@@ -414,8 +414,10 @@ model Demo {
   foundExistingSite  Boolean?
   emailSubject       String?
   emailBody          String?
-  // Queued | Building | Ready | DeployFailed | Error
+  // Queued | Building | Ready | DeployFailed | Error | Imported
   status             String   @default("Queued")
+  score              Int?
+  tier               String?  // Hot | Warm | Cold
   createdById        String
   createdBy          User     @relation("DemoCreator", fields: [createdById], references: [id])
   convertedProjectId String?

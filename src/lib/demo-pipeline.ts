@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
 import { researchAndBuild, draftOutreachEmail, slugifyLabel } from "@/lib/leadgen";
 import { deploySubdomain } from "@/lib/deploy";
+import { scoreLead } from "@/lib/lead-scoring";
 
 export type DemoRunResult = { ok: boolean; status: string; error?: string };
 
@@ -76,7 +77,16 @@ export async function runDemoPipeline(demoId: string): Promise<DemoRunResult> {
       liveUrl: liveUrl || "",
     });
 
-    // (f) save everything
+    // (f) re-score now that research has run, then save everything
+    const scored = scoreLead({
+      businessName: demo.businessName,
+      city: demo.city,
+      industry: demo.industry,
+      email: demo.email,
+      currentWebsite: demo.currentWebsite,
+      foundExistingSite: research.foundExistingSite,
+      researchSummary: research.researchSummary,
+    });
     const status = deployFailed ? "DeployFailed" : "Ready";
     await prisma.demo.update({
       where: { id: demoId },
@@ -87,6 +97,8 @@ export async function runDemoPipeline(demoId: string): Promise<DemoRunResult> {
         foundExistingSite: research.foundExistingSite,
         emailSubject: draft.subject,
         emailBody: draft.body,
+        score: scored.score,
+        tier: scored.tier,
         status,
       },
     });

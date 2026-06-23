@@ -42,6 +42,10 @@ const STATUS_STYLES: Record<string, string> = {
   // lead generator (Demo)
   Queued: "bg-navy-100 text-navy-600",
   Imported: "bg-accent-soft text-accent-hover",
+  // lead score tiers
+  Hot: "bg-accent text-white",
+  Warm: "bg-amber-100 text-amber-700",
+  Cold: "bg-navy-100 text-navy-500",
   Building: "bg-blue-100 text-blue-700",
   Ready: "bg-emerald-100 text-emerald-700",
   DeployFailed: "bg-orange-100 text-orange-700",
