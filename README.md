@@ -210,6 +210,21 @@ Cedar Lane Yoga,Columbia,Yoga Studio,studio@cedarlaneyoga.com,
 "Webb & Sons Landscaping, LLC",Catonsville,Landscaping,marcus@webblandscaping.com,https://webblandscaping.com
 ```
 
+### In-portal AI assistant (admin + employee)
+
+A slide-out chat panel (toggle in the portal shell) on every `/admin` and
+`/staff` page — **not shown to clients**. It answers questions about the user's
+own visible data, coaches call prep / drafts follow-up emails for a named lead,
+and helps with wording and pricing. Powered by `claude-sonnet-4-6`
+(`ANTHROPIC_API_KEY`, server-side only). **Security spine:** a server action
+(`requireRoleAction("ADMIN","EMPLOYEE")`) re-fetches the user's data with the
+**same role-scoped Prisma queries the pages use** and feeds only that to the
+model — an employee sees only their assigned projects, the demos/announcements
+they can already see, and their own mailbox addresses; never other users' data,
+internal notes, mailbox contents, password hashes, or env. Read-and-advise only
+(no actions, no audio/recording); usage is logged to the audit log (who/when,
+not message content).
+
 ### Security model
 
 All access control is enforced **server-side on the data** — in page loaders,

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Wordmark } from "@/components/Wordmark";
+import { AssistantPanel } from "@/components/portal/AssistantPanel";
 import { ROLE_LABELS, type Role } from "@/lib/constants";
 
 export type NavItem = {
@@ -115,6 +116,9 @@ export function PortalShell({
 
         <main className="min-w-0 flex-1">{children}</main>
       </div>
+
+      {/* In-portal AI assistant — admins and employees only, never clients. */}
+      {user.role !== "CLIENT" && <AssistantPanel />}
     </div>
   );
 }
