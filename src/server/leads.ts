@@ -7,7 +7,7 @@ import { requireRoleAction } from "@/lib/authz";
 import { audit } from "@/lib/audit";
 import { hashPassword } from "@/lib/password";
 import { teardownSubdomain } from "@/lib/deploy";
-import { runDemoPipeline } from "@/lib/demo-pipeline";
+import { runDemoPipeline, safeError } from "@/lib/demo-pipeline";
 import crypto from "crypto";
 
 type Result = { ok: boolean; error?: string };
@@ -24,7 +24,8 @@ const fail = (error: string): Result => ({ ok: false, error });
  */
 function startDemoPipeline(demoId: string): void {
   void runDemoPipeline(demoId).catch((err) => {
-    console.error(`[leadgen] pipeline crashed for demo ${demoId}:`, err);
+    // Log message only — never the raw error object or env.
+    console.error(`[leadgen] pipeline crashed for demo ${demoId}: ${safeError(err)}`);
     prisma.demo
       .update({ where: { id: demoId }, data: { status: "Error" } })
       .catch(() => {});
@@ -93,7 +94,8 @@ export async function deleteDemo(id: string): Promise<Result> {
     try {
       await teardownSubdomain(demo.subdomainLabel);
     } catch (err) {
-      console.error(`[deleteDemo] teardown failed for ${demo.subdomainLabel}:`, err);
+      // Log message only — never the raw error object or env.
+      console.error(`[deleteDemo] teardown failed for ${demo.subdomainLabel}: ${safeError(err)}`);
     }
   }
 

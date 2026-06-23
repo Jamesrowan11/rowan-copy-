@@ -6,6 +6,18 @@ import { deploySubdomain } from "@/lib/deploy";
 export type DemoRunResult = { ok: boolean; status: string; error?: string };
 
 /**
+ * Extract a SAFE, log-friendly string from any thrown value. Only the message
+ * is returned — never the raw error object (some SDK errors carry request
+ * headers/credentials) and never anything env-related. This guarantees the
+ * pipeline's catch blocks can never log secrets or environment variables.
+ */
+export function safeError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  return "unknown error";
+}
+
+/**
  * Runs the full Lead Generator pipeline for a Demo IN-PROCESS:
  *   research (claude-sonnet-4-6 + web search) -> build HTML -> deploy via
  *   `plesk bin subdomain` -> draft outreach email (claude-haiku-4-5) -> save.
@@ -52,7 +64,8 @@ export async function runDemoPipeline(demoId: string): Promise<DemoRunResult> {
       liveUrl = await deploySubdomain(label, research.html);
     } catch (err) {
       deployFailed = true;
-      console.error(`[demo ${demoId}] deploy failed:`, err);
+      // Log message only — never the raw error object or env.
+      console.error(`[demo ${demoId}] deploy failed: ${safeError(err)}`);
     }
 
     // (e) draft the outreach email (with the real live URL if we have one)
@@ -90,14 +103,14 @@ export async function runDemoPipeline(demoId: string): Promise<DemoRunResult> {
 
     return { ok: !deployFailed, status };
   } catch (err) {
-    console.error(`[demo ${demoId}] error:`, err);
+    // Log message only — never the raw error object or env.
+    const message = safeError(err);
+    console.error(`[demo ${demoId}] error: ${message}`);
     await prisma.demo.update({
       where: { id: demoId },
       data: {
         status: "Error",
-        researchSummary:
-          demo.researchSummary ||
-          `Generation failed: ${err instanceof Error ? err.message : "unknown error"}`,
+        researchSummary: demo.researchSummary || `Generation failed: ${message}`,
       },
     });
     return { ok: false, status: "Error", error: "generation failed" };
