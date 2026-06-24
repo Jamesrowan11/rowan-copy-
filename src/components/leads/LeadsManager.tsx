@@ -12,6 +12,7 @@ import {
   generateDemo,
   generateDemoNow,
   scoreAllUnscored,
+  editDemo,
 } from "@/server/leads";
 import { scoreLead } from "@/lib/lead-scoring";
 import { CsvImportPanel } from "./CsvImportPanel";
@@ -32,6 +33,8 @@ export type DemoView = {
   researchSummary: string | null;
   score: number | null;
   tier: string | null;
+  lastEditInstruction: string | null;
+  lastEditedAt: string | null;
   convertedProjectId: string | null;
   createdAt: string;
 };
@@ -49,7 +52,9 @@ export function LeadsManager({ demos, basePath }: { demos: DemoView[]; basePath:
 
   // Auto-refresh while any demo is still being researched/built so a
   // "Building" row flips to "Ready" without a manual reload.
-  const inProgress = demos.some((d) => d.status === "Queued" || d.status === "Building");
+  const inProgress = demos.some(
+    (d) => d.status === "Queued" || d.status === "Building" || d.status === "Editing",
+  );
   useEffect(() => {
     if (!inProgress || genAll) return;
     const t = setInterval(() => router.refresh(), 4000);
@@ -195,8 +200,11 @@ function DemoRow({ demo, basePath }: { demo: DemoView; basePath: string }) {
   const [pending, start] = useTransition();
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const busy = demo.status === "Queued" || demo.status === "Building";
+  const busy =
+    demo.status === "Queued" || demo.status === "Building" || demo.status === "Editing";
   const canGenerate = ["Imported", "Error", "DeployFailed"].includes(demo.status);
+  // A demo with a live site can be AI-edited (Ready, or a previous edit that failed).
+  const canEdit = demo.status === "Ready" || demo.status === "EditFailed";
 
   return (
     <div className="card p-5">
@@ -302,6 +310,22 @@ function DemoRow({ demo, basePath }: { demo: DemoView; basePath: string }) {
         {error && <span className="text-xs text-red-600">{error}</span>}
       </div>
 
+      {demo.status === "Editing" && (
+        <p className="mt-3 flex items-center gap-2 text-sm text-blue-700">
+          <Spinner /> Editing &amp; redeploying — the live URL won&apos;t change.
+        </p>
+      )}
+
+      {canEdit && (
+        <EditWithAI demoId={demo.id} failed={demo.status === "EditFailed"} />
+      )}
+
+      {demo.lastEditInstruction && demo.status !== "Editing" && (
+        <p className="mt-2 text-xs text-navy-400">
+          Last edit{demo.lastEditedAt ? ` · ${fmtDateTime(demo.lastEditedAt)}` : ""}: “{demo.lastEditInstruction}”
+        </p>
+      )}
+
       {demo.emailSubject && (
         <details className="mt-3 rounded-lg border border-navy-100 bg-navy-50/40 p-3">
           <summary className="cursor-pointer text-sm font-600 text-navy">Outreach email draft</summary>
@@ -309,6 +333,61 @@ function DemoRow({ demo, basePath }: { demo: DemoView; basePath: string }) {
           <pre className="mt-1 whitespace-pre-wrap font-sans text-sm text-navy-700">{demo.emailBody}</pre>
         </details>
       )}
+    </div>
+  );
+}
+
+function EditWithAI({ demoId, failed }: { demoId: string; failed: boolean }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [instruction, setInstruction] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function submit() {
+    const text = instruction.trim();
+    if (!text) return;
+    setError(null);
+    start(async () => {
+      const res = await editDemo(demoId, text);
+      if (!res.ok) setError(res.error || "Failed");
+      else {
+        setInstruction("");
+        router.refresh();
+      }
+    });
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-navy-100 bg-navy-50/40 p-3">
+      <label className="label" htmlFor={`edit-${demoId}`}>
+        Edit with AI
+      </label>
+      <div className="flex flex-wrap items-start gap-2">
+        <input
+          id={`edit-${demoId}`}
+          className="input flex-1"
+          value={instruction}
+          onChange={(e) => setInstruction(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          placeholder="e.g. make the header navy, add a contact form, mention they're family-owned"
+          disabled={pending}
+        />
+        <button type="button" className="btn-primary btn-sm" disabled={pending || !instruction.trim()} onClick={submit}>
+          {pending ? "Sending…" : "Revise & redeploy"}
+        </button>
+      </div>
+      <p className="mt-1 text-xs text-navy-400">
+        Revises the existing site and redeploys to the same URL. Keeps everything you didn&apos;t ask to change.
+      </p>
+      {failed && !error && (
+        <p className="mt-1 text-xs text-orange-600">Last edit failed — your live site is unchanged. Try again.</p>
+      )}
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
     </div>
   );
 }

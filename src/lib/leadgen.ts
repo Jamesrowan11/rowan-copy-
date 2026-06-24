@@ -106,6 +106,52 @@ export async function researchAndBuild(input: {
   return parsed;
 }
 
+const EDIT_SYSTEM = `You revise an existing one-page marketing website for a small business. You are given the CURRENT full HTML and an edit instruction. Apply ONLY what the instruction asks; keep everything else exactly as it is (copy, structure, sections, styling that wasn't mentioned). The result must remain a complete, self-contained, modern, mobile-friendly HTML document with inline <style> only (no external CSS/JS frameworks, no external requests). Do not add tracking, forms that post anywhere real, or external links you can't verify.
+
+Output ONLY the full revised HTML document, starting with <!doctype html>. No explanation, no code fences.`;
+
+/** Pull a full HTML document out of a model response (handles code fences / preamble). */
+function extractHtml(raw: string): string {
+  let html = raw.trim();
+  const fenced = /```(?:html)?\s*([\s\S]*?)```/i.exec(html);
+  if (fenced) html = fenced[1].trim();
+  const docIdx = html.toLowerCase().indexOf("<!doctype");
+  const htmlIdx = html.toLowerCase().indexOf("<html");
+  const start = docIdx !== -1 ? docIdx : htmlIdx;
+  if (start > 0) html = html.slice(start).trim();
+  return html.replace(/^```[a-zA-Z]*\s*/, "").replace(/```$/, "").trim();
+}
+
+/**
+ * Revise an existing site's HTML per a freeform instruction and return the FULL
+ * revised HTML document. Throws if the model doesn't return a usable page.
+ */
+export async function reviseSiteHtml(currentHtml: string, instruction: string): Promise<string> {
+  const client = new Anthropic();
+  const res = await client.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 16000,
+    system: [{ type: "text", text: EDIT_SYSTEM, cache_control: { type: "ephemeral" } }],
+    messages: [
+      {
+        role: "user",
+        content: `Edit instruction:\n${instruction}\n\nCURRENT HTML:\n${currentHtml}`,
+      },
+    ],
+  });
+
+  const raw = res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("\n");
+
+  const html = extractHtml(raw);
+  if (!html || !/<!doctype|<html/i.test(html)) {
+    throw new Error("The model did not return a usable HTML page.");
+  }
+  return html;
+}
+
 export type EmailDraft = { subject: string; body: string };
 
 const EMAIL_SYSTEM = `You write short, warm, genuinely helpful cold outreach emails for Rowan Copy, a small Maryland web + copywriting studio. Never salesy, never pushy, no hype, no clichés. Under 120 words. Mention that you built them a free sample website and include the link. Sound like a real person who took the time to look at their business.

@@ -32,6 +32,8 @@ export default async function StaffLeadsPage() {
           researchSummary: d.researchSummary,
           score: d.score,
           tier: d.tier,
+          lastEditInstruction: d.lastEditInstruction,
+          lastEditedAt: d.lastEditedAt ? d.lastEditedAt.toISOString() : null,
           convertedProjectId: d.convertedProjectId,
           createdAt: d.createdAt.toISOString(),
         }))}

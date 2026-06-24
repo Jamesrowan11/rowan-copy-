@@ -47,8 +47,10 @@ const STATUS_STYLES: Record<string, string> = {
   Warm: "bg-amber-100 text-amber-700",
   Cold: "bg-navy-100 text-navy-500",
   Building: "bg-blue-100 text-blue-700",
+  Editing: "bg-blue-100 text-blue-700",
   Ready: "bg-emerald-100 text-emerald-700",
   DeployFailed: "bg-orange-100 text-orange-700",
+  EditFailed: "bg-orange-100 text-orange-700",
   Error: "bg-red-100 text-red-700",
 };
 

@@ -7,7 +7,7 @@ import { requireRoleAction } from "@/lib/authz";
 import { audit } from "@/lib/audit";
 import { hashPassword } from "@/lib/password";
 import { teardownSubdomain } from "@/lib/deploy";
-import { runDemoPipeline, safeError } from "@/lib/demo-pipeline";
+import { runDemoPipeline, runDemoEdit, safeError } from "@/lib/demo-pipeline";
 import { parseCsv, guessMapping, IMPORT_FIELDS, type ImportField } from "@/lib/csv";
 import { scoreLead } from "@/lib/lead-scoring";
 import { searchPlaces, placesConfigured } from "@/lib/places";
@@ -35,6 +35,48 @@ function startDemoPipeline(demoId: string): void {
       .update({ where: { id: demoId }, data: { status: "Error" } })
       .catch(() => {});
   });
+}
+
+/** Fire-and-forget background AI edit (same pattern as startDemoPipeline). */
+function startDemoEdit(demoId: string, instruction: string): void {
+  void runDemoEdit(demoId, instruction).catch((err) => {
+    console.error(`[leadgen] edit crashed for demo ${demoId}: ${safeError(err)}`);
+    prisma.demo
+      .update({ where: { id: demoId }, data: { status: "EditFailed" } })
+      .catch(() => {});
+  });
+}
+
+const editSchema = z.object({
+  demoId: z.string().min(1),
+  instruction: z.string().trim().min(1, "Tell the AI what to change.").max(2000),
+});
+
+/**
+ * Edit a Ready demo's site with AI and redeploy to the SAME subdomain. Validates
+ * synchronously, sets status "Editing", then runs the revise+redeploy in the
+ * background so this returns fast (the row updates via polling).
+ */
+export async function editDemo(demoId: string, instruction: string): Promise<Result> {
+  await requireRoleAction("ADMIN", "EMPLOYEE");
+  const parsed = editSchema.safeParse({ demoId, instruction });
+  if (!parsed.success) {
+    return fail(parsed.error.issues[0]?.message || "Invalid instruction.");
+  }
+
+  const demo = await prisma.demo.findUnique({ where: { id: parsed.data.demoId } });
+  if (!demo) return fail("Demo not found.");
+  if (!["Ready", "EditFailed"].includes(demo.status)) {
+    return fail("You can only edit a demo once it's live (Ready).");
+  }
+  if (!demo.subdomainLabel) return fail("This demo has no deployed site to edit.");
+
+  await prisma.demo.update({ where: { id: demo.id }, data: { status: "Editing" } });
+  startDemoEdit(demo.id, parsed.data.instruction);
+
+  revalidatePath("/admin/leads");
+  revalidatePath("/staff/leads");
+  return OK;
 }
 
 const demoSchema = z.object({

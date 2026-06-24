@@ -38,6 +38,30 @@ export async function deploySubdomain(label: string, html: string): Promise<stri
   return `https://${label}.${DOMAIN}`;
 }
 
+/**
+ * Redeploy to an EXISTING subdomain: write a new index.html into its web root
+ * WITHOUT creating a new subdomain (so subdomainLabel and liveUrl don't change).
+ * Writes to a temp file then atomically renames, so a failed write can never
+ * leave the live site half-written — the previous version stays intact.
+ */
+export async function redeploySubdomain(label: string, html: string): Promise<void> {
+  const webRoot = path.join(VHOST_ROOT, label);
+  await fs.mkdir(webRoot, { recursive: true });
+  const target = path.join(webRoot, "index.html");
+  const tmp = path.join(webRoot, `.index.html.${process.pid}.tmp`);
+  await fs.writeFile(tmp, html, "utf8");
+  await fs.rename(tmp, target); // atomic on the same filesystem
+}
+
+/** Read the currently deployed index.html for a subdomain, or null if unavailable. */
+export async function readDeployedHtml(label: string): Promise<string | null> {
+  try {
+    return await fs.readFile(path.join(VHOST_ROOT, label, "index.html"), "utf8");
+  } catch {
+    return null;
+  }
+}
+
 /** Remove the subdomain (best-effort teardown). */
 export async function teardownSubdomain(label: string): Promise<void> {
   await execFileAsync("sudo", [
