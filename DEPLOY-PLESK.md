@@ -301,9 +301,12 @@ sudo visudo -f /etc/sudoers.d/rowancopy-leadgen
 Add exactly (replace `rowancopy` with your subscription's system user):
 
 ```
-# Allow the Rowan Copy app to manage ONLY Plesk subdomains, nothing else.
-rowancopy ALL=(root) NOPASSWD: /usr/sbin/plesk bin subdomain --create *, /usr/sbin/plesk bin subdomain --remove *
+# Allow the Rowan Copy app to manage ONLY Plesk subdomains and site aliases.
+rowancopy ALL=(root) NOPASSWD: /usr/sbin/plesk bin subdomain --create *, /usr/sbin/plesk bin subdomain --remove *, /usr/sbin/plesk bin site-alias --create *
 ```
+
+The `site-alias --create` entry is for the **Go Live on Custom Domain** feature
+(§11d): it points a client's domain at an existing demo's docroot.
 
 Verify the `plesk` path with `which plesk` (often `/usr/sbin/plesk` or
 `/usr/local/psa/bin/...`); use the real absolute path in the rule. Confirm the
@@ -318,6 +321,25 @@ owns that tree.
 
 Deleting a demo in the portal ("Delete & tear down") runs
 `plesk bin subdomain --remove`, so dead demos don't accumulate.
+
+### 11d. Go Live on a custom domain
+
+For a Ready demo, an admin can point a client's real domain at the demo's site:
+
+1. The client adds an **A record** for their root domain (`@`) pointing to this
+   server's IP — set `DEMO_SERVER_IP` (default `3.151.16.78`) to your server's
+   real public IP. Recommend they also add a `www` A record (or CNAME to root).
+2. In the portal (Admin → Lead generator → a Ready demo → **Go live on custom
+   domain**), the admin runs a **pre-flight check**: the app does real DNS
+   lookups and an AI explains, in plain English, exactly what (if anything) still
+   needs fixing. **Go Live** is disabled until the root points here.
+3. **Go Live** runs `plesk bin site-alias --create <domain> -domain
+   <label>.rowancopy.com -www true`, aliasing the custom domain (and `www`) onto
+   the demo's existing docroot. This is **additive** — the `rowancopy.com`
+   preview subdomain keeps working — and Plesk's "keep websites secured"
+   auto-provisions the Let's Encrypt cert for the new domain.
+
+The domain is validated to a safe hostname and passed via `execFile` (no shell).
 
 ---
 

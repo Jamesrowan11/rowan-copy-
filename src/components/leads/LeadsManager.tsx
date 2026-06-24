@@ -13,6 +13,8 @@ import {
   generateDemoNow,
   scoreAllUnscored,
   editDemo,
+  preflightCustomDomain,
+  goLiveCustomDomain,
 } from "@/server/leads";
 import { scoreLead } from "@/lib/lead-scoring";
 import { CsvImportPanel } from "./CsvImportPanel";
@@ -35,6 +37,9 @@ export type DemoView = {
   tier: string | null;
   lastEditInstruction: string | null;
   lastEditedAt: string | null;
+  customDomain: string | null;
+  customDomainStatus: string;
+  lastDnsCheck: string | null;
   convertedProjectId: string | null;
   createdAt: string;
 };
@@ -186,7 +191,7 @@ export function LeadsManager({ demos, basePath }: { demos: DemoView[]; basePath:
         ) : (
           <div className="space-y-3">
             {visibleDemos.map((d) => (
-              <DemoRow key={d.id} demo={d} basePath={basePath} />
+              <DemoRow key={d.id} demo={d} basePath={basePath} isAdmin={isAdmin} />
             ))}
           </div>
         )}
@@ -195,7 +200,7 @@ export function LeadsManager({ demos, basePath }: { demos: DemoView[]; basePath:
   );
 }
 
-function DemoRow({ demo, basePath }: { demo: DemoView; basePath: string }) {
+function DemoRow({ demo, basePath, isAdmin }: { demo: DemoView; basePath: string; isAdmin: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [copied, setCopied] = useState(false);
@@ -320,6 +325,8 @@ function DemoRow({ demo, basePath }: { demo: DemoView; basePath: string }) {
         <EditWithAI demoId={demo.id} failed={demo.status === "EditFailed"} />
       )}
 
+      {isAdmin && demo.status === "Ready" && <CustomDomainPanel demo={demo} />}
+
       {demo.lastEditInstruction && demo.status !== "Editing" && (
         <p className="mt-2 text-xs text-navy-400">
           Last edit{demo.lastEditedAt ? ` · ${fmtDateTime(demo.lastEditedAt)}` : ""}: “{demo.lastEditInstruction}”
@@ -334,6 +341,101 @@ function DemoRow({ demo, basePath }: { demo: DemoView; basePath: string }) {
         </details>
       )}
     </div>
+  );
+}
+
+function CustomDomainPanel({ demo }: { demo: DemoView }) {
+  const router = useRouter();
+  const [checking, startCheck] = useTransition();
+  const [going, startGo] = useTransition();
+  const [domain, setDomain] = useState(demo.customDomain ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const status = demo.customDomainStatus;
+  const ready = status === "ReadyToGoLive";
+
+  if (status === "Live" && demo.customDomain) {
+    return (
+      <div className="mt-3 rounded-lg border border-green-200 bg-green-50/60 p-3">
+        <p className="text-sm font-600 text-green-800">
+          🌐 Live on custom domain ·{" "}
+          <a href={`https://${demo.customDomain}`} target="_blank" rel="noreferrer" className="link">
+            {demo.customDomain} ↗
+          </a>
+        </p>
+        <p className="mt-1 text-xs text-navy-500">The rowancopy.com preview URL also still works.</p>
+      </div>
+    );
+  }
+
+  function runCheck() {
+    const d = domain.trim();
+    if (!d) return;
+    setError(null);
+    startCheck(async () => {
+      const res = await preflightCustomDomain(demo.id, d);
+      if (!res.ok) setError(res.error || "Check failed.");
+      router.refresh();
+    });
+  }
+
+  function goLive() {
+    setError(null);
+    startGo(async () => {
+      const res = await goLiveCustomDomain(demo.id);
+      if (!res.ok) setError(res.error || "Go-live failed.");
+      router.refresh();
+    });
+  }
+
+  return (
+    <details className="mt-3 rounded-lg border border-navy-100 bg-navy-50/40 p-3" open={status !== "None"}>
+      <summary className="cursor-pointer text-sm font-600 text-navy">
+        Go live on custom domain
+        {status !== "None" && (
+          <span className="ml-2 align-middle">
+            <StatusBadge status={status} />
+          </span>
+        )}
+      </summary>
+
+      <div className="mt-3 space-y-3">
+        <p className="text-xs text-navy-500">
+          Have the client point their domain&apos;s A record to{" "}
+          <code className="rounded bg-navy-100 px-1 font-mono">3.151.16.78</code>, then run a pre-flight check.
+        </p>
+
+        <div className="flex flex-wrap items-end gap-2">
+          <input
+            className="input flex-1"
+            value={domain}
+            onChange={(e) => setDomain(e.target.value)}
+            placeholder="theirbusiness.com"
+            disabled={checking || going}
+          />
+          <button type="button" className="btn-outline btn-sm" disabled={checking || going || !domain.trim()} onClick={runCheck}>
+            {checking ? "Checking…" : "Run pre-flight check"}
+          </button>
+          <button
+            type="button"
+            className="btn-primary btn-sm"
+            disabled={!ready || checking || going}
+            title={ready ? "" : "Run a pre-flight check that passes first"}
+            onClick={goLive}
+          >
+            {going ? "Going live…" : "Go Live"}
+          </button>
+        </div>
+
+        {demo.lastDnsCheck && (
+          <div className="rounded-lg border border-navy-100 bg-white p-3">
+            <p className="mb-1 text-xs font-600 uppercase tracking-wide text-navy-400">Readiness report</p>
+            <pre className="whitespace-pre-wrap font-sans text-sm text-navy-700">{demo.lastDnsCheck}</pre>
+          </div>
+        )}
+
+        {error && <p className="text-xs text-red-600">{error}</p>}
+      </div>
+    </details>
   );
 }
 

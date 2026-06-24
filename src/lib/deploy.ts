@@ -62,6 +62,32 @@ export async function readDeployedHtml(label: string): Promise<string | null> {
   }
 }
 
+/**
+ * Point a client's custom domain at an EXISTING demo subdomain's docroot by
+ * creating a Plesk site alias of `<label>.<DOMAIN>` (additive — the subdomain
+ * keeps working; both root and www are aliased; Plesk auto-SSL covers the alias).
+ * Needs a scoped sudoers rule for `plesk bin site-alias` (see DEPLOY-PLESK.md).
+ * `customDomain` is validated (hostname) by the caller; execFile uses no shell.
+ */
+export async function addCustomDomainAlias(
+  customDomain: string,
+  subdomainLabel: string,
+): Promise<string> {
+  const fqdn = `${subdomainLabel}.${DOMAIN}`;
+  await execFileAsync("sudo", [
+    "plesk",
+    "bin",
+    "site-alias",
+    "--create",
+    customDomain,
+    "-domain",
+    fqdn,
+    "-www",
+    "true",
+  ]);
+  return `https://${customDomain}`;
+}
+
 /** Remove the subdomain (best-effort teardown). */
 export async function teardownSubdomain(label: string): Promise<void> {
   await execFileAsync("sudo", [

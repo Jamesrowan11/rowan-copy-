@@ -34,6 +34,9 @@ export default async function AdminLeadsPage() {
           tier: d.tier,
           lastEditInstruction: d.lastEditInstruction,
           lastEditedAt: d.lastEditedAt ? d.lastEditedAt.toISOString() : null,
+          customDomain: d.customDomain,
+          customDomainStatus: d.customDomainStatus,
+          lastDnsCheck: d.lastDnsCheck,
           convertedProjectId: d.convertedProjectId,
           createdAt: d.createdAt.toISOString(),
         }))}

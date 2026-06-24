@@ -6,7 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { requireRoleAction } from "@/lib/authz";
 import { audit } from "@/lib/audit";
 import { hashPassword } from "@/lib/password";
-import { teardownSubdomain } from "@/lib/deploy";
+import { teardownSubdomain, addCustomDomainAlias } from "@/lib/deploy";
+import { runPreflight } from "@/lib/dns-preflight";
 import { runDemoPipeline, runDemoEdit, safeError } from "@/lib/demo-pipeline";
 import { parseCsv, guessMapping, IMPORT_FIELDS, type ImportField } from "@/lib/csv";
 import { scoreLead } from "@/lib/lead-scoring";
@@ -77,6 +78,119 @@ export async function editDemo(demoId: string, instruction: string): Promise<Res
   revalidatePath("/admin/leads");
   revalidatePath("/staff/leads");
   return OK;
+}
+
+// --------------------------------------------------------------------------
+// Go Live on a custom domain (ADMIN only)
+// --------------------------------------------------------------------------
+
+// Basic hostname validation: labels of a-z0-9/hyphen, a TLD, no scheme/path.
+const DOMAIN_RE = /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/i;
+
+const domainSchema = z.object({
+  demoId: z.string().min(1),
+  domain: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .transform((d) => d.replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, ""))
+    .refine((d) => DOMAIN_RE.test(d), "Enter a valid domain like example.com."),
+});
+
+export type PreflightActionResult = {
+  ok: boolean;
+  error?: string;
+  report?: string;
+  status?: string;
+  ready?: boolean;
+};
+
+/**
+ * Run the pre-flight DNS check for a custom domain: real lookups -> AI-explained
+ * readiness report. Stores the report + sets ReadyToGoLive / Pending. Does NOT
+ * go live (that's a separate explicit admin action).
+ */
+export async function preflightCustomDomain(
+  demoId: string,
+  domain: string,
+): Promise<PreflightActionResult> {
+  const admin = await requireRoleAction("ADMIN"); // ADMIN only
+  const parsed = domainSchema.safeParse({ demoId, domain });
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message || "Invalid domain." };
+
+  const demo = await prisma.demo.findUnique({ where: { id: parsed.data.demoId } });
+  if (!demo) return { ok: false, error: "Demo not found." };
+  if (demo.status !== "Ready") return { ok: false, error: "The demo must be Ready (live) first." };
+  if (demo.customDomainStatus === "Live") return { ok: false, error: "This domain is already live." };
+
+  let result;
+  try {
+    result = await runPreflight(parsed.data.domain);
+  } catch (err) {
+    console.error(`[customDomain] preflight failed: ${safeError(err)}`);
+    return { ok: false, error: "The DNS check failed. Please try again." };
+  }
+
+  const status = result.ready ? "ReadyToGoLive" : "Pending";
+  await prisma.demo.update({
+    where: { id: demo.id },
+    data: { customDomain: parsed.data.domain, customDomainStatus: status, lastDnsCheck: result.report },
+  });
+
+  await audit({
+    actorId: admin.id,
+    action: "use",
+    entityType: "Demo",
+    entityId: demo.id,
+    summary: `Pre-flight DNS check for "${parsed.data.domain}" -> ${status} (root ${result.rootOk ? "OK" : "not pointing to us"})`,
+  });
+
+  revalidatePath("/admin/leads");
+  return { ok: true, report: result.report, status, ready: result.ready };
+}
+
+export type GoLiveResult = { ok: boolean; error?: string; liveUrl?: string };
+
+/**
+ * Go live on the custom domain — only when a pre-flight check passed
+ * (ReadyToGoLive). Adds a Plesk site alias pointing the domain (and www) at the
+ * demo's existing subdomain docroot. Additive: the rowancopy.com subdomain keeps
+ * working. On failure -> Failed; the existing subdomain is untouched.
+ */
+export async function goLiveCustomDomain(demoId: string): Promise<GoLiveResult> {
+  const admin = await requireRoleAction("ADMIN"); // ADMIN only
+  const demo = await prisma.demo.findUnique({ where: { id: demoId } });
+  if (!demo) return { ok: false, error: "Demo not found." };
+  if (demo.customDomainStatus !== "ReadyToGoLive") {
+    return { ok: false, error: "Run a pre-flight check that passes first." };
+  }
+  if (!demo.customDomain) return { ok: false, error: "No custom domain set." };
+  if (!demo.subdomainLabel) return { ok: false, error: "This demo has no deployed site." };
+
+  try {
+    const liveUrl = await addCustomDomainAlias(demo.customDomain, demo.subdomainLabel);
+    await prisma.demo.update({
+      where: { id: demo.id },
+      data: { customDomainStatus: "Live" },
+    });
+    await audit({
+      actorId: admin.id,
+      action: "update",
+      entityType: "Demo",
+      entityId: demo.id,
+      summary: `Custom domain LIVE: ${demo.customDomain} -> ${demo.subdomainLabel}.${process.env.DEMO_DOMAIN || "rowancopy.com"}`,
+    });
+    revalidatePath("/admin/leads");
+    return { ok: true, liveUrl };
+  } catch (err) {
+    console.error(`[customDomain] go-live failed: ${safeError(err)}`);
+    await prisma.demo.update({
+      where: { id: demo.id },
+      data: { customDomainStatus: "Failed" },
+    });
+    revalidatePath("/admin/leads");
+    return { ok: false, error: "Couldn't add the domain in Plesk. Your demo site is unchanged — check the report and try again." };
+  }
 }
 
 const demoSchema = z.object({
