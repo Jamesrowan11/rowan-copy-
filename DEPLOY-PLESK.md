@@ -289,10 +289,10 @@ So any generated subdomain resolves and gets HTTPS automatically:
 
 ### 11c. Scoped sudoers rule (least privilege)
 
-The app shells out to `plesk bin subdomain` to create/remove subdomains. Grant
-the Node app's OS user permission to run **only that one command** as root —
-**not** full root. Find the app user (Plesk → Subscriptions → your domain →
-shows the system user, e.g. `rowancopy`), then:
+The app shells out to `plesk bin` to manage subdomains, site aliases, and
+mailboxes. Grant the Node app's OS user permission to run **only those
+commands** as root — **not** full root. Find the app user (Plesk →
+Subscriptions → your domain → shows the system user, e.g. `rowancopy`), then:
 
 ```bash
 sudo visudo -f /etc/sudoers.d/rowancopy-leadgen
@@ -301,12 +301,16 @@ sudo visudo -f /etc/sudoers.d/rowancopy-leadgen
 Add exactly (replace `rowancopy` with your subscription's system user):
 
 ```
-# Allow the Rowan Copy app to manage ONLY Plesk subdomains and site aliases.
-rowancopy ALL=(root) NOPASSWD: /usr/sbin/plesk bin subdomain --create *, /usr/sbin/plesk bin subdomain --remove *, /usr/sbin/plesk bin site-alias --create *
+# Allow the Rowan Copy app to manage ONLY Plesk subdomains, site aliases, and mailboxes.
+rowancopy ALL=(root) NOPASSWD: /usr/sbin/plesk bin subdomain --create *, /usr/sbin/plesk bin subdomain --remove *, /usr/sbin/plesk bin site-alias --create *, /usr/sbin/plesk bin mail --create *, /usr/sbin/plesk bin mail --update *, /usr/sbin/plesk bin mail --remove *
 ```
 
 The `site-alias --create` entry is for the **Go Live on Custom Domain** feature
 (§11d): it points a client's domain at an existing demo's docroot.
+
+The three `plesk bin mail` entries power **mailbox provisioning from the portal**
+(§11e): create a real mail account, reset its password, and delete it — all from
+Admin → Mailboxes / a mailbox's Mail settings, without opening Plesk Admin.
 
 Verify the `plesk` path with `which plesk` (often `/usr/sbin/plesk` or
 `/usr/local/psa/bin/...`); use the real absolute path in the rule. Confirm the
@@ -317,7 +321,9 @@ owns that tree.
 > The generated subdomain label is slugified to `[a-z0-9-]` only, and the app
 > invokes the command with `execFile` (no shell), so the fixed-argument call is
 > not susceptible to shell injection. The sudoers rule still scopes it to just
-> the two `plesk bin subdomain` actions as defense in depth.
+> the whitelisted `plesk bin` actions as defense in depth. Mailbox addresses are
+> validated against an email regex and passwords are passed as `execFile` args
+> (no shell), so they can't break out of the argument vector either.
 
 Deleting a demo in the portal ("Delete & tear down") runs
 `plesk bin subdomain --remove`, so dead demos don't accumulate.
@@ -340,6 +346,31 @@ For a Ready demo, an admin can point a client's real domain at the demo's site:
    auto-provisions the Let's Encrypt cert for the new domain.
 
 The domain is validated to a safe hostname and passed via `execFile` (no shell).
+
+### 11e. Manage mailboxes from the portal
+
+Once the §11c sudoers rule includes the three `plesk bin mail` entries, an admin
+can run the whole mailbox lifecycle from the portal — no Plesk Admin needed:
+
+1. **Create** — Admin → Mailboxes → **+ Add mailbox**. Leave "Create this mailbox
+   on the server now (Plesk)" checked and set a password (8+ chars). The app runs
+   `plesk bin mail --create <address> -mailbox true -passwd <pw>` **first**; only
+   if that succeeds does it write the portal record (storing the password
+   encrypted), so a failed provision never leaves an orphaned connection. Uncheck
+   the box to register connection details for a mailbox that already exists.
+2. **Reset password** — a mailbox's **Mail settings → Reset password on the mail
+   server** runs `plesk bin mail --update <address> -passwd <pw>` and updates the
+   stored connection in one step. The separate "Connection password" field only
+   changes what the portal connects with (leave it for the rare case the server
+   password was changed elsewhere).
+3. **Delete on server** — removes the account with `plesk bin mail --remove
+   <address>` and then drops the portal record. If the server removal fails the
+   portal record is kept, so the mailbox is never silently lost. "Disconnect"
+   (admin) still does the portal-only removal.
+
+If the sudoers rule or the `plesk` binary is missing (e.g. local dev), these
+actions fail with a clear "the server isn't set up for portal provisioning yet"
+message and make **no** changes — no half-created mailboxes.
 
 ---
 

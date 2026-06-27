@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireRoleAction, type SessionUser } from "@/lib/authz";
 import { encryptSecret } from "@/lib/crypto";
 import { audit } from "@/lib/audit";
+import { pleskCreateMailbox, pleskSetPassword, pleskRemoveMailbox } from "@/lib/plesk-mail";
 import {
   getMailboxForUser,
   sendFromMailbox,
@@ -18,6 +19,19 @@ import type { Mailbox } from "@prisma/client";
 type Result = { ok: boolean; error?: string; info?: string };
 const OK: Result = { ok: true };
 const fail = (error: string): Result => ({ ok: false, error });
+
+// Extract a short, safe message from a failed `plesk bin` call (surfaces Plesk's
+// own stderr like "mailbox already exists" — never env or the raw error object).
+function pleskMsg(err: unknown): string {
+  const e = (err || {}) as { stderr?: string; message?: string };
+  const s = String(e.stderr || e.message || "").trim();
+  const first = s.split("\n").find((l) => l.trim()) || "";
+  // A missing `plesk`/`sudo` binary means provisioning isn't set up on this host.
+  if (/ENOENT|not found|command not found/i.test(s)) {
+    return "the server isn't set up for portal provisioning yet (plesk CLI/sudo rule missing).";
+  }
+  return first.slice(0, 200) || "the command failed.";
+}
 
 function canManage(mb: Mailbox, user: SessionUser): boolean {
   return user.role === "ADMIN" || mb.ownerId === user.id;
@@ -52,6 +66,25 @@ export async function createMailbox(
 
   const host = String(formData.get("host") || address.split("@")[1]).trim();
 
+  // Optionally PROVISION the real mailbox on the Plesk mail server (no more
+  // hopping into Plesk Admin). We create it on the server FIRST — if that fails,
+  // we return without writing a DB row, so there's never an orphaned connection.
+  const provision = formData.get("provision") === "on";
+  let passwordEnc: string | undefined;
+  if (provision) {
+    const password = String(formData.get("password") || "");
+    if (password.length < 8) {
+      return fail("Set a password (8+ characters) to create the mailbox on the server.");
+    }
+    try {
+      await pleskCreateMailbox(address, password);
+    } catch (err) {
+      return fail(`Couldn't create the mailbox on the server: ${pleskMsg(err)}`);
+    }
+    // Store it encrypted so the mailbox is immediately usable in webmail.
+    passwordEnc = encryptSecret(password);
+  }
+
   await prisma.mailbox.create({
     data: {
       address,
@@ -65,13 +98,74 @@ export async function createMailbox(
       smtpPort: parseInt(String(formData.get("smtpPort") || "587"), 10) || 587,
       smtpSecure: formData.get("smtpSecure") === "on",
       username: String(formData.get("username") || address).trim(),
+      ...(passwordEnc ? { passwordEnc } : {}),
     },
   });
   await audit({
     actorId: admin.id,
     action: "create",
     entityType: "Mailbox",
-    summary: `Created mailbox ${address}${shared ? " (shared)" : ""}`,
+    summary: `${provision ? "Provisioned" : "Registered"} mailbox ${address}${shared ? " (shared)" : ""}`,
+  });
+  revalidatePath("/admin/mailboxes");
+  return OK;
+}
+
+/**
+ * Reset the ACTUAL mailbox password on the Plesk mail server (admin only) and
+ * update the stored connection password so webmail keeps working — all from the
+ * portal. If the server call fails, the stored password is left unchanged.
+ */
+export async function resetMailboxPasswordOnServer(
+  _prev: Result,
+  formData: FormData,
+): Promise<Result> {
+  const admin = await requireRoleAction("ADMIN");
+  const id = String(formData.get("id") || "");
+  const password = String(formData.get("password") || "");
+  if (password.length < 8) return fail("New password must be at least 8 characters.");
+  const mb = await prisma.mailbox.findUnique({ where: { id } });
+  if (!mb) return fail("Mailbox not found.");
+
+  try {
+    await pleskSetPassword(mb.address, password);
+  } catch (err) {
+    return fail(`Couldn't reset the password on the server: ${pleskMsg(err)}`);
+  }
+  await prisma.mailbox.update({ where: { id }, data: { passwordEnc: encryptSecret(password) } });
+  await audit({
+    actorId: admin.id,
+    action: "update",
+    entityType: "Mailbox",
+    entityId: id,
+    summary: `Reset server password for mailbox ${mb.address}`,
+  });
+  revalidatePath("/admin/mailboxes");
+  revalidatePath("/staff/mail/settings");
+  return OK;
+}
+
+/**
+ * Delete the mailbox on the Plesk mail server AND remove it from the portal
+ * (admin only). If the server removal fails, the portal record is kept so the
+ * connection isn't silently lost.
+ */
+export async function deleteMailboxOnServer(id: string): Promise<Result> {
+  const admin = await requireRoleAction("ADMIN");
+  const mb = await prisma.mailbox.findUnique({ where: { id } });
+  if (!mb) return fail("Mailbox not found.");
+  try {
+    await pleskRemoveMailbox(mb.address);
+  } catch (err) {
+    return fail(`Couldn't delete the mailbox on the server: ${pleskMsg(err)}`);
+  }
+  await prisma.mailbox.delete({ where: { id } });
+  await audit({
+    actorId: admin.id,
+    action: "delete",
+    entityType: "Mailbox",
+    entityId: id,
+    summary: `Deleted mailbox ${mb.address} from the server and portal`,
   });
   revalidatePath("/admin/mailboxes");
   return OK;

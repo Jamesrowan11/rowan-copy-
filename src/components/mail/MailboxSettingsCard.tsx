@@ -1,7 +1,13 @@
 import { ActionForm } from "@/components/portal/ActionForm";
 import { ConfirmButton } from "@/components/portal/ConfirmButton";
 import { TestMailboxButton } from "./TestMailboxButton";
-import { updateMailboxSettings, setMailboxPassword, deleteMailbox } from "@/server/mail";
+import {
+  updateMailboxSettings,
+  setMailboxPassword,
+  deleteMailbox,
+  resetMailboxPasswordOnServer,
+  deleteMailboxOnServer,
+} from "@/server/mail";
 import type { Mailbox } from "@prisma/client";
 
 export function MailboxSettingsCard({
@@ -30,13 +36,22 @@ export function MailboxSettingsCard({
             <span className="badge bg-amber-100 text-amber-700">Not connected</span>
           )}
           {isAdmin && (
-            <ConfirmButton
-              action={deleteMailbox.bind(null, mailbox.id)}
-              confirm={`Delete mailbox ${mailbox.address}? This only removes it from the portal, not from the mail server.`}
-              className="text-xs text-red-500 hover:underline"
-            >
-              Delete
-            </ConfirmButton>
+            <>
+              <ConfirmButton
+                action={deleteMailbox.bind(null, mailbox.id)}
+                confirm={`Disconnect mailbox ${mailbox.address}? This only removes it from the portal — the mail account stays on the server.`}
+                className="text-xs text-navy-400 hover:underline"
+              >
+                Disconnect
+              </ConfirmButton>
+              <ConfirmButton
+                action={deleteMailboxOnServer.bind(null, mailbox.id)}
+                confirm={`Delete mailbox ${mailbox.address} from the mail SERVER and the portal? This permanently removes the account and all its mail. This cannot be undone.`}
+                className="text-xs text-red-500 hover:underline"
+              >
+                Delete on server
+              </ConfirmButton>
+            </>
           )}
         </div>
       </div>
@@ -47,12 +62,27 @@ export function MailboxSettingsCard({
         </div>
       )}
 
-      {/* Password */}
+      {/* Reset the real password on the mail server (admin only) */}
+      {isAdmin && (
+        <div className="mb-5 border-t border-navy-100 pt-4">
+          <h4 className="mb-2 text-sm font-600 text-navy">Reset password on the mail server</h4>
+          <ActionForm action={resetMailboxPasswordOnServer} hidden={{ id: mailbox.id }} submitText="Reset on server" successText="Reset on server & re-connected" resetOnSuccess>
+            <input name="password" type="password" className="input" placeholder="New mailbox password (8+ characters)" autoComplete="new-password" minLength={8} required />
+            <p className="text-xs text-navy-400">
+              Changes the actual account password in Plesk and updates the stored connection — no need to open Plesk Admin.
+            </p>
+          </ActionForm>
+        </div>
+      )}
+
+      {/* Connection password (stored in the portal only) */}
       <div className="mb-5 border-t border-navy-100 pt-4">
-        <h4 className="mb-2 text-sm font-600 text-navy">Mailbox password</h4>
+        <h4 className="mb-2 text-sm font-600 text-navy">{isAdmin ? "Connection password" : "Mailbox password"}</h4>
         <ActionForm action={setMailboxPassword} hidden={{ id: mailbox.id }} submitText={configured ? "Update password" : "Connect mailbox"} successText="Saved & encrypted" resetOnSuccess>
           <input name="password" type="password" className="input" placeholder="Mailbox password" autoComplete="new-password" required />
-          <p className="text-xs text-navy-400">Stored encrypted (AES-256-GCM). Used to send and read mail.</p>
+          <p className="text-xs text-navy-400">
+            Stored encrypted (AES-256-GCM). Used to send and read mail. {isAdmin ? "This only updates what the portal connects with — it does not change the password on the server." : ""}
+          </p>
         </ActionForm>
       </div>
 

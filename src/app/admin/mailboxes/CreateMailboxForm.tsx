@@ -11,6 +11,7 @@ export function CreateMailboxForm({ staff }: { staff: StaffOption[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [shared, setShared] = useState(false);
+  const [provision, setProvision] = useState(true);
   const [state, action, pending] = useActionState(createMailbox, { ok: false } as Result);
 
   if (state.ok && open) {
@@ -76,8 +77,46 @@ export function CreateMailboxForm({ staff }: { staff: StaffOption[] }) {
         </div>
       </div>
 
+      <div className="rounded-lg border border-navy-100 bg-navy-50/40 p-4 space-y-3">
+        <label className="flex items-start gap-2 text-sm text-navy-700">
+          <input
+            type="checkbox"
+            name="provision"
+            className="mt-0.5 rounded"
+            checked={provision}
+            onChange={(e) => setProvision(e.target.checked)}
+          />
+          <span>
+            <span className="font-600 text-navy">Create this mailbox on the server now (Plesk)</span>
+            <br />
+            Provisions a real mail account on the server. Leave unchecked to only register
+            connection details for a mailbox that already exists.
+          </span>
+        </label>
+        {provision && (
+          <div>
+            <label className="label" htmlFor="password">Mailbox password</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              className="input"
+              minLength={8}
+              autoComplete="new-password"
+              placeholder="At least 8 characters"
+              required={provision}
+            />
+            <p className="mt-1 text-xs text-navy-400">
+              Sets the password on the server and stores it encrypted so the portal can connect.
+            </p>
+          </div>
+        )}
+      </div>
+
       <p className="text-xs text-navy-400">
-        After creating it, the owner sets the mailbox password (encrypted) and a signature from their Mail settings.
+        {provision
+          ? "The owner can change the signature anytime from their Mail settings."
+          : "After creating it, the owner sets the mailbox password (encrypted) and a signature from their Mail settings."}
       </p>
       <button type="submit" className="btn-primary" disabled={pending}>
         {pending ? "Adding…" : "Add mailbox"}
