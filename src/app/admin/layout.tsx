@@ -19,6 +19,7 @@ export default async function AdminLayout({
     { href: "/admin/messages", label: "Messages", badge: unread || undefined },
     { href: "/admin/emails", label: "Compose email" },
     { href: "/admin/mailboxes", label: "Mailboxes" },
+    { href: "/admin/domains", label: "Domains" },
     { href: "/admin/users", label: "Users & team" },
     { href: "/admin/plans", label: "Monthly plans" },
     { href: "/admin/announcements", label: "Announcements" },

@@ -302,11 +302,13 @@ Add exactly (replace `rowancopy` with your subscription's system user):
 
 ```
 # Allow the Rowan Copy app to manage ONLY Plesk subdomains, site aliases, and mailboxes.
-rowancopy ALL=(root) NOPASSWD: /usr/sbin/plesk bin subdomain --create *, /usr/sbin/plesk bin subdomain --remove *, /usr/sbin/plesk bin site-alias --create *, /usr/sbin/plesk bin mail --create *, /usr/sbin/plesk bin mail --update *, /usr/sbin/plesk bin mail --remove *
+rowancopy ALL=(root) NOPASSWD: /usr/sbin/plesk bin subdomain --create *, /usr/sbin/plesk bin subdomain --remove *, /usr/sbin/plesk bin subdomain --list, /usr/sbin/plesk bin site-alias --create *, /usr/sbin/plesk bin site-alias --remove *, /usr/sbin/plesk bin mail --create *, /usr/sbin/plesk bin mail --update *, /usr/sbin/plesk bin mail --remove *
 ```
 
 The `site-alias --create` entry is for the **Go Live on Custom Domain** feature
-(§11d): it points a client's domain at an existing demo's docroot.
+(§11d); `site-alias --remove` and `subdomain --list` power the **Domains page**
+(§11f), which lists subdomains and lets an admin detach a custom domain or add/
+remove standalone subdomains.
 
 The three `plesk bin mail` entries power **mailbox provisioning from the portal**
 (§11e): create a real mail account, reset its password, and delete it — all from
@@ -371,6 +373,25 @@ can run the whole mailbox lifecycle from the portal — no Plesk Admin needed:
 If the sudoers rule or the `plesk` binary is missing (e.g. local dev), these
 actions fail with a clear "the server isn't set up for portal provisioning yet"
 message and make **no** changes — no half-created mailboxes.
+
+### 11f. Manage domains from the portal
+
+Admin → **Domains** consolidates everything domain-related in one place:
+
+- **Subdomains** — lists what exists on the server (`plesk bin subdomain
+  --list`), tagging each as a demo preview or a standalone subdomain. Add a
+  standalone subdomain (`plesk bin subdomain --create`, seeded with a placeholder
+  page) or remove one (`plesk bin subdomain --remove`). Demo-backed subdomains
+  are read-only here — they're managed from the Lead generator's "Delete & tear
+  down" so demo state can't be silently broken.
+- **Custom domains** — lists the client domains aliased onto demos, with a
+  **Detach** action (`plesk bin site-alias --remove`) that removes the alias and
+  resets the demo's domain fields. The demo's preview subdomain keeps working.
+
+The subdomain list is read-only and best-effort: if the `plesk` CLI isn't
+available the page just shows the demos the portal already knows about, so it
+never errors. Labels are validated to a DNS-safe slug and domains to a hostname,
+and every command runs via `execFile` (no shell).
 
 ---
 
