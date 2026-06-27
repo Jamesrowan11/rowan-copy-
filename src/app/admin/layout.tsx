@@ -20,6 +20,7 @@ export default async function AdminLayout({
     { href: "/admin/emails", label: "Compose email" },
     { href: "/admin/mailboxes", label: "Mailboxes" },
     { href: "/admin/domains", label: "Domains" },
+    { href: "/admin/dns", label: "DNS records" },
     { href: "/admin/users", label: "Users & team" },
     { href: "/admin/plans", label: "Monthly plans" },
     { href: "/admin/announcements", label: "Announcements" },

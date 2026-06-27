@@ -301,14 +301,15 @@ sudo visudo -f /etc/sudoers.d/rowancopy-leadgen
 Add exactly (replace `rowancopy` with your subscription's system user):
 
 ```
-# Allow the Rowan Copy app to manage ONLY Plesk subdomains, site aliases, and mailboxes.
-rowancopy ALL=(root) NOPASSWD: /usr/sbin/plesk bin subdomain --create *, /usr/sbin/plesk bin subdomain --remove *, /usr/sbin/plesk bin subdomain --list, /usr/sbin/plesk bin site-alias --create *, /usr/sbin/plesk bin site-alias --remove *, /usr/sbin/plesk bin mail --create *, /usr/sbin/plesk bin mail --update *, /usr/sbin/plesk bin mail --remove *
+# Allow the Rowan Copy app to manage ONLY Plesk subdomains, site aliases, mailboxes, and DNS.
+rowancopy ALL=(root) NOPASSWD: /usr/sbin/plesk bin subdomain --create *, /usr/sbin/plesk bin subdomain --remove *, /usr/sbin/plesk bin subdomain --list, /usr/sbin/plesk bin site-alias --create *, /usr/sbin/plesk bin site-alias --remove *, /usr/sbin/plesk bin mail --create *, /usr/sbin/plesk bin mail --update *, /usr/sbin/plesk bin mail --remove *, /usr/sbin/plesk bin dns --info *, /usr/sbin/plesk bin dns --add *, /usr/sbin/plesk bin dns --del *
 ```
 
 The `site-alias --create` entry is for the **Go Live on Custom Domain** feature
 (§11d); `site-alias --remove` and `subdomain --list` power the **Domains page**
 (§11f), which lists subdomains and lets an admin detach a custom domain or add/
-remove standalone subdomains.
+remove standalone subdomains. The three `plesk bin dns` entries power the **DNS
+records page** (§11g) — list/add/remove records on Plesk-hosted zones.
 
 The three `plesk bin mail` entries power **mailbox provisioning from the portal**
 (§11e): create a real mail account, reset its password, and delete it — all from
@@ -392,6 +393,36 @@ The subdomain list is read-only and best-effort: if the `plesk` CLI isn't
 available the page just shows the demos the portal already knows about, so it
 never errors. Labels are validated to a DNS-safe slug and domains to a hostname,
 and every command runs via `execFile` (no shell).
+
+### 11g. Manage DNS records from the portal
+
+Admin → **DNS records** lists a domain's records (`plesk bin dns --info`) and
+lets an admin add (`plesk bin dns --add`) or remove (`plesk bin dns --del`) them.
+
+**This only affects what the world resolves if Plesk is the _authoritative_ DNS
+server for the domain.** For `rowancopy.com` that's true only if your nameservers
+point at this Plesk box. If DNS lives at your registrar, Route 53, or Cloudflare,
+edit it there — the page shows a banner saying as much, and an empty list is the
+tell that Plesk isn't hosting the zone.
+
+Guardrails, because DNS has the widest blast radius:
+
+- **Supported types are A, AAAA, CNAME, and TXT only.** MX/NS/SOA/SRV are
+  deliberately excluded so a stray edit can't break mail or delegate the zone.
+- Every value is validated to its type (IPv4/IPv6/hostname/length) and passed via
+  `execFile` (no shell).
+- **Remove** is offered only for records where Plesk's output exposes a numeric
+  record id, and that id is re-validated (`^\d+$`) before it reaches the CLI — so
+  a mis-parsed listing can never delete the wrong record. Records without an id
+  show "Edit in Plesk" instead.
+- The verify command Plesk runs to render the page (`dns --info`) is read-only;
+  if it's unavailable the page degrades to an empty list rather than erroring.
+
+> The Plesk `dns` CLI's exact flags and `--info` output format can vary by Plesk
+> version. The portal runs `dns --add <domain> -a <host> -ip <ip>` (and the
+> AAAA/CNAME/TXT equivalents) and parses `dns --info` defensively. Confirm these
+> against your Plesk version after deploying; the per-type argument construction
+> is isolated in `src/lib/plesk-dns.ts` if a flag name differs on your build.
 
 ---
 
