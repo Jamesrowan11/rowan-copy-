@@ -12,7 +12,7 @@ export default async function ClientLayout({
   const [unread, mailboxCount, account] = await Promise.all([
     getUnreadThreadCount(user.id),
     prisma.mailbox.count({ where: { ownerId: user.id, active: true } }),
-    prisma.user.findUnique({ where: { id: user.id }, select: { mailAdmin: true } }),
+    prisma.user.findUnique({ where: { id: user.id }, select: { mailAdmin: true, mailDomain: true } }),
   ]);
 
   const nav: NavItem[] = [
@@ -23,6 +23,8 @@ export default async function ClientLayout({
     ...(mailboxCount > 0 ? [{ href: "/client/mail", label: "Mail" }] : []),
     // Customers with the mailbox-management switch on get a team-mail admin area.
     ...(account?.mailAdmin ? [{ href: "/client/team-email", label: "Team email" }] : []),
+    // Customers with an assigned domain can manage its settings + DNS records.
+    ...(account?.mailDomain ? [{ href: "/client/domain", label: "Domain" }] : []),
     { href: "/client/email", label: "Email account" },
     { href: "/client/profile", label: "My profile" },
   ];
