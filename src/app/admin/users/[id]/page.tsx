@@ -123,7 +123,9 @@ export default async function AdminUserDetail({
               <h2 className="mb-1 text-lg font-600 text-navy">Mailbox management</h2>
               <p className="mb-3 text-xs text-navy-400">
                 Lets this customer manage their own mailbox and create teammates (each a portal
-                login + mailbox) on their domain. Plesk mail must be enabled for the domain.
+                login + mailbox) on their domain. After enabling, finish setup from{" "}
+                <Link href="/admin/mail-domains" className="text-copper hover:underline">Mail domains</Link>{" "}
+                (one click to add the domain to the server for mail).
               </p>
               <ActionForm action={setMailAdmin} hidden={{ id: user.id }} submitText="Save" successText="Saved">
                 <label className="flex items-center gap-2 text-sm text-navy-700">

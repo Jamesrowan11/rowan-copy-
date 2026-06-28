@@ -301,8 +301,8 @@ sudo visudo -f /etc/sudoers.d/rowancopy-leadgen
 Add exactly (replace `rowancopy` with your subscription's system user):
 
 ```
-# Allow the Rowan Copy app to manage ONLY Plesk subdomains, site aliases, mailboxes, and DNS.
-rowancopy ALL=(root) NOPASSWD: /usr/sbin/plesk bin subdomain --create *, /usr/sbin/plesk bin subdomain --remove *, /usr/sbin/plesk bin subdomain --list, /usr/sbin/plesk bin site-alias --create *, /usr/sbin/plesk bin site-alias --remove *, /usr/sbin/plesk bin mail --create *, /usr/sbin/plesk bin mail --update *, /usr/sbin/plesk bin mail --remove *, /usr/sbin/plesk bin dns --info *, /usr/sbin/plesk bin dns --add *, /usr/sbin/plesk bin dns --del *
+# Allow the Rowan Copy app to manage ONLY Plesk subdomains, site aliases, mailboxes, DNS, and domains.
+rowancopy ALL=(root) NOPASSWD: /usr/sbin/plesk bin subdomain --create *, /usr/sbin/plesk bin subdomain --remove *, /usr/sbin/plesk bin subdomain --list, /usr/sbin/plesk bin site-alias --create *, /usr/sbin/plesk bin site-alias --remove *, /usr/sbin/plesk bin mail --create *, /usr/sbin/plesk bin mail --update *, /usr/sbin/plesk bin mail --remove *, /usr/sbin/plesk bin dns --info *, /usr/sbin/plesk bin dns --add *, /usr/sbin/plesk bin dns --del *, /usr/sbin/plesk bin domain --create *, /usr/sbin/plesk bin domain --list
 ```
 
 The `site-alias --create` entry is for the **Go Live on Custom Domain** feature
@@ -314,6 +314,10 @@ records page** (§11g) — list/add/remove records on Plesk-hosted zones.
 The three `plesk bin mail` entries power **mailbox provisioning from the portal**
 (§11e): create a real mail account, reset its password, and delete it — all from
 Admin → Mailboxes / a mailbox's Mail settings, without opening Plesk Admin.
+
+The two `plesk bin domain` entries power the **Mail domains page** (§11h): add a
+customer's own domain to the server (as an add-on under the main subscription) so
+their team can have mailboxes on it.
 
 Verify the `plesk` path with `which plesk` (often `/usr/sbin/plesk` or
 `/usr/local/psa/bin/...`); use the real absolute path in the rule. Confirm the
@@ -423,6 +427,39 @@ Guardrails, because DNS has the widest blast radius:
 > AAAA/CNAME/TXT equivalents) and parses `dns --info` defensively. Confirm these
 > against your Plesk version after deploying; the per-type argument construction
 > is isolated in `src/lib/plesk-dns.ts` if a flag name differs on your build.
+
+### 11h. Set up a customer's domain for mail (Mail domains page)
+
+When you switch on **Mailbox management** for a customer (Admin → Users → a client),
+their mailboxes live on **their own domain**. For that to work the domain must
+exist on this server with mail enabled. Admin → **Mail domains** does this from
+the portal:
+
+- It lists every customer you've switched on, grouped by domain, with a live
+  status — **Not set up**, **Needs MX**, or **Ready** — computed from the Plesk
+  domain list plus real DNS lookups (MX, and whether the MX resolves to this
+  server `DEMO_SERVER_IP`).
+- **Set up mail** adds the domain as an **add-on under the main subscription**
+  via `plesk bin domain --create <domain> -webspace-name <DEMO_DOMAIN> -ip
+  <DEMO_SERVER_IP>`. New Plesk domains have mail service on by default, and Plesk
+  seeds the domain's DNS zone (including MX) when it is the authoritative DNS for
+  the domain. The action is idempotent (a no-op if the domain already exists).
+- **Pointing mail here:** if the domain's DNS is hosted at Plesk, the MX is set
+  automatically. If DNS is external (registrar / Route 53 / Cloudflare), add an
+  `MX` record there pointing at the domain (which must resolve to
+  `DEMO_SERVER_IP`). The status row tells you exactly which case you're in.
+
+> Adding a domain touches hosting, so it's the most setup-specific command here.
+> The portal uses the standard add-on form and the create call is isolated in
+> `src/lib/plesk-mail-domain.ts`; confirm the flags against your Plesk version
+> after deploying. Everything else on the page (the domain list and DNS status)
+> is read-only.
+
+What still isn't in the portal — and isn't Plesk: the **one-time server/account
+bootstrap** (installing Plesk/Node, this sudoers rule, the DB) and **AWS/registrar
+account settings** (the outbound **port-25** unblock and the **PTR** record on the
+Elastic IP, plus public DNS if you keep it at a registrar). Those live in other
+vendors' consoles, so they can't be driven from this app.
 
 ---
 

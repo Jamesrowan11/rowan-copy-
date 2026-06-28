@@ -24,6 +24,7 @@ export default async function AdminLayout({
     { href: "/admin/emails", label: "Compose email" },
     { href: "/admin/mailboxes", label: "Mailboxes" },
     { href: "/admin/mailbox-requests", label: "Mailbox requests", badge: pendingMailboxRequests || undefined },
+    { href: "/admin/mail-domains", label: "Mail domains" },
     { href: "/admin/domains", label: "Domains" },
     { href: "/admin/dns", label: "DNS records" },
     { href: "/admin/users", label: "Users & team" },
