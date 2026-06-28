@@ -28,6 +28,7 @@ import {
   markPaymentPaid,
   deletePayment,
 } from "../../actions";
+import { setMailAdmin } from "@/server/mail-workspace";
 import { ROLE_LABELS, type Role } from "@/lib/constants";
 
 export default async function AdminUserDetail({
@@ -118,6 +119,24 @@ export default async function AdminUserDetail({
         {/* Role-specific: CLIENT */}
         {role === "CLIENT" && (
           <>
+            <section className="card p-5">
+              <h2 className="mb-1 text-lg font-600 text-navy">Mailbox management</h2>
+              <p className="mb-3 text-xs text-navy-400">
+                Lets this customer manage their own mailbox and create teammates (each a portal
+                login + mailbox) on their domain. Plesk mail must be enabled for the domain.
+              </p>
+              <ActionForm action={setMailAdmin} hidden={{ id: user.id }} submitText="Save" successText="Saved">
+                <label className="flex items-center gap-2 text-sm text-navy-700">
+                  <input type="checkbox" name="mailAdmin" defaultChecked={user.mailAdmin} className="rounded" />
+                  Enable mailbox management for this customer
+                </label>
+                <div>
+                  <label className="label" htmlFor="mailDomain">Their domain</label>
+                  <input id="mailDomain" name="mailDomain" className="input" placeholder="acme.com" defaultValue={user.mailDomain ?? ""} />
+                </div>
+              </ActionForm>
+            </section>
+
             <section className="card p-5">
               <h2 className="mb-3 text-lg font-600 text-navy">Monthly plan ($30/mo)</h2>
               <ActionForm action={saveMonthlyPlan} hidden={{ clientId: user.id }} submitText="Save plan" successText="Saved">

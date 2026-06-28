@@ -62,6 +62,15 @@ model User {
   demosCreated   Demo[]     @relation("DemoCreator")
   mailboxRequests         MailboxRequest[] @relation("MailboxRequester")
   mailboxRequestDecisions MailboxRequest[] @relation("MailboxRequestDecider")
+
+  // "Mailbox management" switch: when an admin enables it for a customer, that
+  // customer can manage their own mailbox AND create teammates (each a portal
+  // login + mailbox) on their own domain.
+  mailAdmin            Boolean @default(false)
+  mailDomain           String? // the domain this customer manages mail for
+  mailWorkspaceOwnerId String? // set on teammates -> the customer who manages them
+  mailWorkspaceOwner   User?   @relation("MailWorkspace", fields: [mailWorkspaceOwnerId], references: [id])
+  mailTeam             User[]  @relation("MailWorkspace")
 }
 
 // A client's request for an @rowancopy.com email account. An admin approves
