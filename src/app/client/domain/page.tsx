@@ -5,6 +5,8 @@ import { PageHeader, EmptyState } from "@/components/portal/ui";
 import { ConfirmButton } from "@/components/portal/ConfirmButton";
 import { pleskListDns, DNS_TYPES, type DnsType } from "@/lib/plesk-dns";
 import { mailDomainStatus } from "@/lib/plesk-mail-domain";
+import { nameserverStatus } from "@/lib/nameservers";
+import { NameserverNotice } from "@/components/portal/NameserverNotice";
 import { deleteClientDnsRecord } from "@/server/client-domain";
 import { AddClientDnsRecordForm } from "./AddClientDnsRecordForm";
 
@@ -19,9 +21,10 @@ export default async function ClientDomainPage() {
   if (!me?.mailDomain) redirect("/client");
   const domain = me.mailDomain;
 
-  const [status, records] = await Promise.all([
+  const [status, records, nsStatus] = await Promise.all([
     mailDomainStatus(domain),
     pleskListDns(domain),
+    nameserverStatus(domain),
   ]);
 
   const pill = status.ready
@@ -47,11 +50,7 @@ export default async function ClientDomainPage() {
         </div>
       </section>
 
-      <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        <strong>Note:</strong> DNS changes here only take effect if your domain&apos;s DNS is managed by us.
-        If your domain points its nameservers elsewhere (your registrar, etc.), changes won&apos;t apply —
-        reach out to Rowan Copy if you&apos;re not sure.
-      </div>
+      <NameserverNotice status={nsStatus} tone="client" />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <AddClientDnsRecordForm domain={domain} />

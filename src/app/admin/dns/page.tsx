@@ -3,6 +3,8 @@ import { PageHeader, EmptyState } from "@/components/portal/ui";
 import { ConfirmButton } from "@/components/portal/ConfirmButton";
 import { pleskListDns } from "@/lib/plesk-dns";
 import { parentDomain } from "@/lib/plesk-domains";
+import { nameserverStatus } from "@/lib/nameservers";
+import { NameserverNotice } from "@/components/portal/NameserverNotice";
 import { deleteDnsRecord } from "@/server/dns";
 import { AddDnsRecordForm } from "./AddDnsRecordForm";
 
@@ -21,7 +23,10 @@ export default async function AdminDnsPage({
   const raw = (Array.isArray(sp.domain) ? sp.domain[0] : sp.domain) || fallback;
   const domain = HOSTNAME_RE.test(raw) ? raw.toLowerCase() : fallback;
 
-  const records = await pleskListDns(domain);
+  const [records, nsStatus] = await Promise.all([
+    pleskListDns(domain),
+    nameserverStatus(domain),
+  ]);
 
   return (
     <>
@@ -30,12 +35,7 @@ export default async function AdminDnsPage({
         description="Add and remove DNS records on Plesk-hosted zones — without opening Plesk Admin."
       />
 
-      <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        <strong>Heads-up:</strong> these records only change what the world resolves if
-        <strong> Plesk is the authoritative DNS server</strong> for this domain. If your DNS is hosted
-        elsewhere (your registrar, Route&nbsp;53, Cloudflare, …), edit it there instead — changes here
-        won&apos;t take effect. If the list below is empty, Plesk likely isn&apos;t hosting this zone.
-      </div>
+      <NameserverNotice status={nsStatus} tone="admin" />
 
       {/* Domain selector */}
       <form method="get" className="mb-6 flex flex-wrap items-end gap-3">
