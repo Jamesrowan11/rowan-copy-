@@ -14,14 +14,17 @@ function isStaff(user: SessionUser) {
   return user.role === "ADMIN" || user.role === "EMPLOYEE";
 }
 
-/** Mailboxes a user may use: their own + any shared mailbox (staff only). */
+/**
+ * Mailboxes a user may use. Everyone gets the mailboxes they OWN (clients can be
+ * granted their own @rowancopy.com mailbox via the request flow). Staff also get
+ * shared mailboxes (e.g. info@).
+ */
 export async function mailboxesForUser(user: SessionUser): Promise<Mailbox[]> {
-  if (!isStaff(user)) return [];
+  const where = isStaff(user)
+    ? { active: true, OR: [{ ownerId: user.id }, { shared: true }] }
+    : { active: true, ownerId: user.id };
   return prisma.mailbox.findMany({
-    where: {
-      active: true,
-      OR: [{ ownerId: user.id }, { shared: true }],
-    },
+    where,
     orderBy: [{ shared: "asc" }, { address: "asc" }],
   });
 }
@@ -31,11 +34,12 @@ export async function getMailboxForUser(
   mailboxId: string,
   user: SessionUser,
 ): Promise<Mailbox | null> {
-  if (!isStaff(user)) return null;
   const mb = await prisma.mailbox.findUnique({ where: { id: mailboxId } });
   if (!mb || !mb.active) return null;
+  // The owner may always access their own mailbox (any role, including clients).
   if (mb.ownerId === user.id) return mb;
-  if (mb.shared) return mb;
+  // Shared mailboxes are staff-only.
+  if (mb.shared && isStaff(user)) return mb;
   // Admins may access any mailbox (e.g. to manage/troubleshoot).
   if (user.role === "ADMIN") return mb;
   return null;

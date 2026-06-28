@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/authz";
 import { getUnreadThreadCount } from "@/lib/messages";
+import { prisma } from "@/lib/prisma";
 import { PortalShell, type NavItem } from "@/components/portal/PortalShell";
 
 export default async function AdminLayout({
@@ -8,7 +9,10 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   const user = await requireAdmin();
-  const unread = await getUnreadThreadCount(user.id);
+  const [unread, pendingMailboxRequests] = await Promise.all([
+    getUnreadThreadCount(user.id),
+    prisma.mailboxRequest.count({ where: { status: "Pending" } }),
+  ]);
 
   const nav: NavItem[] = [
     { href: "/admin", label: "Overview" },
@@ -19,6 +23,7 @@ export default async function AdminLayout({
     { href: "/admin/messages", label: "Messages", badge: unread || undefined },
     { href: "/admin/emails", label: "Compose email" },
     { href: "/admin/mailboxes", label: "Mailboxes" },
+    { href: "/admin/mailbox-requests", label: "Mailbox requests", badge: pendingMailboxRequests || undefined },
     { href: "/admin/domains", label: "Domains" },
     { href: "/admin/dns", label: "DNS records" },
     { href: "/admin/users", label: "Users & team" },

@@ -175,7 +175,7 @@ export async function updateMailboxSettings(
   _prev: Result,
   formData: FormData,
 ): Promise<Result> {
-  const user = await requireRoleAction("ADMIN", "EMPLOYEE");
+  const user = await requireRoleAction("ADMIN", "EMPLOYEE", "CLIENT");
   const id = String(formData.get("id") || "");
   const mb = await prisma.mailbox.findUnique({ where: { id } });
   if (!mb) return fail("Mailbox not found.");
@@ -199,6 +199,7 @@ export async function updateMailboxSettings(
   await prisma.mailbox.update({ where: { id }, data });
   revalidatePath("/admin/mailboxes");
   revalidatePath("/staff/mail/settings");
+  revalidatePath("/client/mail/settings");
   return OK;
 }
 
@@ -206,7 +207,7 @@ export async function setMailboxPassword(
   _prev: Result,
   formData: FormData,
 ): Promise<Result> {
-  const user = await requireRoleAction("ADMIN", "EMPLOYEE");
+  const user = await requireRoleAction("ADMIN", "EMPLOYEE", "CLIENT");
   const id = String(formData.get("id") || "");
   const password = String(formData.get("password") || "");
   if (!password) return fail("Enter the mailbox password.");
@@ -227,6 +228,7 @@ export async function setMailboxPassword(
   });
   revalidatePath("/admin/mailboxes");
   revalidatePath("/staff/mail/settings");
+  revalidatePath("/client/mail/settings");
   return OK;
 }
 
@@ -247,7 +249,7 @@ export async function deleteMailbox(id: string): Promise<Result> {
 }
 
 export async function testMailbox(id: string): Promise<Result> {
-  const user = await requireRoleAction("ADMIN", "EMPLOYEE");
+  const user = await requireRoleAction("ADMIN", "EMPLOYEE", "CLIENT");
   const mb = await getMailboxForUser(id, user);
   if (!mb) return fail("Mailbox not found.");
   if (!mb.passwordEnc) return fail("Set the mailbox password first.");
@@ -261,7 +263,7 @@ export async function testMailbox(id: string): Promise<Result> {
 // ---------------------------------------------------------------------------
 
 export async function sendMail(_prev: Result, formData: FormData): Promise<Result> {
-  const user = await requireRoleAction("ADMIN", "EMPLOYEE");
+  const user = await requireRoleAction("ADMIN", "EMPLOYEE", "CLIENT");
   const mailboxId = String(formData.get("mailboxId") || "");
   const mb = await getMailboxForUser(mailboxId, user);
   if (!mb) return fail("Mailbox not found.");
@@ -303,7 +305,7 @@ export async function markMessageRead(
   uid: number,
   seen: boolean,
 ): Promise<Result> {
-  const user = await requireRoleAction("ADMIN", "EMPLOYEE");
+  const user = await requireRoleAction("ADMIN", "EMPLOYEE", "CLIENT");
   const mb = await getMailboxForUser(mailboxId, user);
   if (!mb) return fail("Mailbox not found.");
   try {
@@ -319,7 +321,7 @@ export async function deleteMailMessage(
   folder: string,
   uid: number,
 ): Promise<Result> {
-  const user = await requireRoleAction("ADMIN", "EMPLOYEE");
+  const user = await requireRoleAction("ADMIN", "EMPLOYEE", "CLIENT");
   const mb = await getMailboxForUser(mailboxId, user);
   if (!mb) return fail("Mailbox not found.");
   try {

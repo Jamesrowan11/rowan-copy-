@@ -60,6 +60,28 @@ model User {
   auditLogs      AuditLog[] @relation("AuditActor")
   mailboxes      Mailbox[]  @relation("MailboxOwner")
   demosCreated   Demo[]     @relation("DemoCreator")
+  mailboxRequests         MailboxRequest[] @relation("MailboxRequester")
+  mailboxRequestDecisions MailboxRequest[] @relation("MailboxRequestDecider")
+}
+
+// A client's request for an @rowancopy.com email account. An admin approves
+// (which provisions a real Plesk mailbox and assigns it to them) or denies it.
+model MailboxRequest {
+  id           String    @id @default(cuid())
+  requesterId  String
+  requester    User      @relation("MailboxRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  desiredLocal String    // requested local part, e.g. "john" in john@rowancopy.com
+  domain       String    @default("rowancopy.com")
+  note         String?   // optional message from the requester
+  // Pending | Approved | Denied
+  status       String    @default("Pending")
+  decisionNote String?   // admin's note on approval/denial
+  mailboxId    String?   // the Mailbox created on approval (no FK; informational)
+  decidedById  String?
+  decidedBy    User?     @relation("MailboxRequestDecider", fields: [decidedById], references: [id])
+  decidedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 // ---------------------------------------------------------------------------
