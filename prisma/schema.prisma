@@ -62,6 +62,8 @@ model User {
   demosCreated   Demo[]     @relation("DemoCreator")
   mailboxRequests         MailboxRequest[] @relation("MailboxRequester")
   mailboxRequestDecisions MailboxRequest[] @relation("MailboxRequestDecider")
+  adCampaigns             AdCampaign[]     @relation("AdCampaignClient")
+  adCampaignsCreated      AdCampaign[]     @relation("AdCampaignCreator")
 
   // "Mailbox management" switch: when an admin enables it for a customer, that
   // customer can manage their own mailbox AND create teammates (each a portal
@@ -71,6 +73,26 @@ model User {
   mailWorkspaceOwnerId String? // set on teammates -> the customer who manages them
   mailWorkspaceOwner   User?   @relation("MailWorkspace", fields: [mailWorkspaceOwnerId], references: [id])
   mailTeam             User[]  @relation("MailWorkspace")
+}
+
+// A saved advertising campaign the studio composes for a customer (AI-assisted).
+// A workbench for Google/Meta ad assets; live platform push comes later.
+model AdCampaign {
+  id           String   @id @default(cuid())
+  clientId     String?  // optional link to a client User
+  client       User?    @relation("AdCampaignClient", fields: [clientId], references: [id], onDelete: SetNull)
+  businessName String   // the customer/business the ads are for
+  platform     String   // Google | Meta | Both
+  objective    String?  // Leads | Sales | Traffic | Awareness | Calls | ...
+  audience     String?  // targeting notes
+  budget       String?  // freeform, e.g. "$25/day"
+  // Draft | Ready | Launched
+  status       String   @default("Draft")
+  content      String?  // JSON of generated ad assets (headlines, descriptions, etc.)
+  createdById  String
+  createdBy    User     @relation("AdCampaignCreator", fields: [createdById], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 // A client's request for an @rowancopy.com email account. An admin approves
