@@ -12,6 +12,8 @@ import { ActionForm } from "@/components/portal/ActionForm";
 import { RevisionControls } from "./RevisionControls";
 import { QuoteAccept } from "./QuoteAccept";
 import { saveClientBrief } from "../../actions";
+import { buildDomainGuide } from "@/lib/domain-guide";
+import { DomainSetupGuide } from "@/components/domains/DomainSetupGuide";
 
 export default async function ClientProjectDetail({
   params,
@@ -38,6 +40,7 @@ export default async function ClientProjectDetail({
 
   const canReview = ["Draft Delivered", "Revisions"].includes(project.status);
   const remaining = project.revisionRoundsIncluded - project.revisionRoundsUsed;
+  const domainGuide = project.customDomain ? await buildDomainGuide(project.customDomain) : null;
 
   return (
     <>
@@ -63,6 +66,16 @@ export default async function ClientProjectDetail({
               <div><dt className="text-navy-400">Price</dt><dd className="text-navy-700"><Money value={project.quotedPrice} /></dd></div>
             </dl>
           </section>
+
+          {domainGuide && (
+            <section className="card p-5">
+              <h2 className="mb-1 text-lg font-600 text-navy">Connect your domain ({domainGuide.domain})</h2>
+              <p className="mb-3 text-sm text-navy-500">
+                Follow these steps at your domain registrar to point {domainGuide.domain} to your new site.
+              </p>
+              <DomainSetupGuide guide={domainGuide} audience="client" />
+            </section>
+          )}
 
           {project.quote && project.quote.status !== "Draft" && (
             <QuoteAccept

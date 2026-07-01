@@ -26,6 +26,9 @@ import {
   deletePayment,
 } from "../../actions";
 import { SERVICE_TYPES } from "@/lib/constants";
+import { setProjectDomain } from "@/server/project-domain";
+import { buildDomainGuide } from "@/lib/domain-guide";
+import { DomainSetupGuide } from "@/components/domains/DomainSetupGuide";
 
 export default async function AdminProjectDetail({
   params,
@@ -56,6 +59,7 @@ export default async function AdminProjectDetail({
   });
 
   const bvp = project.client.brandVoiceProfile;
+  const domainGuide = project.customDomain ? await buildDomainGuide(project.customDomain) : null;
 
   return (
     <>
@@ -84,6 +88,36 @@ export default async function AdminProjectDetail({
           <section className="card p-5">
             <h2 className="mb-3 text-lg font-600 text-navy">Status & pipeline</h2>
             <StatusControl projectId={project.id} status={project.status} />
+          </section>
+
+          <section className="card p-5">
+            <h2 className="mb-1 text-lg font-600 text-navy">Custom domain setup</h2>
+            <p className="mb-3 text-xs text-navy-400">
+              Set the client&apos;s domain to generate step-by-step switch-over instructions with a live
+              status check. The client sees the same guide in their project.
+            </p>
+            <ActionForm
+              action={setProjectDomain}
+              hidden={{ projectId: project.id }}
+              submitText={project.customDomain ? "Update domain" : "Generate setup guide"}
+              successText="Saved"
+            >
+              <div>
+                <label className="label" htmlFor="customDomain">Client&apos;s domain</label>
+                <input
+                  id="customDomain"
+                  name="customDomain"
+                  className="input"
+                  placeholder="acme.com"
+                  defaultValue={project.customDomain ?? ""}
+                />
+              </div>
+            </ActionForm>
+            {domainGuide && (
+              <div className="mt-4 border-t border-navy-100 pt-4">
+                <DomainSetupGuide guide={domainGuide} audience="admin" />
+              </div>
+            )}
           </section>
 
           <section className="card p-5">

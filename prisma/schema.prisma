@@ -152,6 +152,8 @@ model Project {
   dueDate               DateTime?
   cancelledReason       String?
   cancelledAt           DateTime?
+  customDomain          String?   // the client's domain being pointed at our server
+  customDomainStatus    String    @default("None") // None | Pending | Live
 
   clientId   String
   client     User    @relation("ClientProjects", fields: [clientId], references: [id])
