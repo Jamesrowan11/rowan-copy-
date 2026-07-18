@@ -5,6 +5,7 @@ import { ActionForm } from "@/components/portal/ActionForm";
 import { ConfirmButton } from "@/components/portal/ConfirmButton";
 import { getBoardConfig } from "@/lib/board";
 import type { BoardReport } from "@/lib/board";
+import { checkDeliverability } from "@/lib/deliverability";
 import { updateBoardConfig, runBoardNow } from "@/server/board";
 
 export const dynamic = "force-dynamic";
@@ -20,9 +21,10 @@ function parseReport(raw: string): BoardReport | null {
 
 export default async function AdminBoardPage() {
   await requireAdmin();
-  const [config, runs] = await Promise.all([
+  const [config, runs, health] = await Promise.all([
     getBoardConfig(),
     prisma.boardRun.findMany({ orderBy: { startedAt: "desc" }, take: 10 }),
+    checkDeliverability(),
   ]);
 
   return (
@@ -58,6 +60,29 @@ export default async function AdminBoardPage() {
           <>The board is in <strong>dry-run</strong> — it plans everything and reports what it <em>would</em> do, but takes no external action. Flip to Live when the reports look right.</>
         )}
       </div>
+
+      {/* Email health — live deliverability audit (also runs before every board run) */}
+      <section className="card mb-6 p-6">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-600 text-navy">Email health — inbox, not spam</h2>
+          <span className={`badge ${health.healthy ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+            {health.healthy ? "Healthy — outreach cleared" : "Issues — outreach auto-paused"}
+          </span>
+        </div>
+        <ul className="grid gap-2 sm:grid-cols-2">
+          {health.checks.map((c) => (
+            <li key={c.name} className={`rounded-lg border px-3 py-2 text-sm ${c.ok ? "border-emerald-100 bg-emerald-50/50 text-navy-700" : "border-red-200 bg-red-50 text-red-800"}`}>
+              <span className="font-600">{c.ok ? "✓" : "✗"} {c.name}</span>
+              <span className="mt-0.5 block break-words text-xs opacity-80">{c.detail}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 text-xs text-navy-400">
+          The Deliverability director runs this audit before every board run and pauses outreach on any
+          critical failure — sender reputation is protected automatically. Every cold email also carries a
+          one-line opt-out.
+        </p>
+      </section>
 
       <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
         {/* Settings */}

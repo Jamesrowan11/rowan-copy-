@@ -6,6 +6,7 @@ import { scoreLead } from "@/lib/lead-scoring";
 import { runDemoPipeline } from "@/lib/demo-pipeline";
 import { sendEmail } from "@/lib/email";
 import { findContactEmail } from "@/lib/email-scout";
+import { checkDeliverability } from "@/lib/deliverability";
 
 // ---------------------------------------------------------------------------
 // The AI Board of Directors: autonomous agents that run the studio's growth
@@ -175,9 +176,33 @@ async function runProduction(cfg: BoardConfig, live: boolean): Promise<DirectorS
   return s;
 }
 
+// --- Deliverability Director: audit sender reputation, gate outreach ---------
+async function runDeliverability(): Promise<{ section: DirectorSection; healthy: boolean }> {
+  const s: DirectorSection = { director: "Deliverability", ran: true, actions: 0, lines: [] };
+  const report = await checkDeliverability();
+  for (const c of report.checks) {
+    s.lines.push(`${c.ok ? "✓" : "✗"} ${c.name}: ${c.detail}`);
+  }
+  s.lines.push(
+    report.healthy
+      ? "Sender reputation healthy — outreach is cleared to send."
+      : "CRITICAL issues above — outreach is PAUSED until they're fixed, to protect the domain's reputation.",
+  );
+  return { section: s, healthy: report.healthy };
+}
+
+// A courteous opt-out line on every cold email — good manners, better inbox
+// placement, and it keeps outreach on the right side of CAN-SPAM.
+const OPT_OUT_LINE =
+  "P.S. I only reach out once — if this isn't useful, just reply “no thanks” and you won't hear from me again.";
+
 // --- Outreach Director: send the drafted email for Ready demos ---------------
-async function runOutreach(cfg: BoardConfig, live: boolean, adminId: string): Promise<DirectorSection> {
+async function runOutreach(cfg: BoardConfig, live: boolean, adminId: string, deliverable: boolean): Promise<DirectorSection> {
   const s: DirectorSection = { director: "Outreach", ran: true, actions: 0, lines: [] };
+  if (!deliverable) {
+    s.lines.push("Paused by the Deliverability director — fix the flagged checks and the next run resumes automatically.");
+    return s;
+  }
   const cap = clamp(cfg.outreach.dailySends, MAX_SENDS);
   if (cap === 0) { s.lines.push("Skipped: daily send cap is 0."); return s; }
 
@@ -223,7 +248,7 @@ async function runOutreach(cfg: BoardConfig, live: boolean, adminId: string): Pr
       await sendEmail({
         to: [demo.email],
         subject: demo.emailSubject as string,
-        text: demo.emailBody as string,
+        text: `${demo.emailBody as string}\n\n${OPT_OUT_LINE}`,
         senderUserId: adminId,
       });
       await prisma.demo.update({ where: { id: demo.id }, data: { outreachSentAt: new Date() } });
@@ -279,9 +304,13 @@ export async function runBoard(trigger: "schedule" | "manual"): Promise<{ id: st
   const run = await prisma.boardRun.create({ data: { mode: cfg.mode, trigger, report: "{}" } });
 
   const sections: DirectorSection[] = [];
+  // Deliverability reports first and gates outreach: a damaged sender
+  // reputation would poison every other director's work.
+  const deliverability = await runDeliverability();
+  sections.push(deliverability.section);
   if (cfg.growth.enabled) sections.push(await runGrowth(cfg, live, adminId));
   if (cfg.production.enabled) sections.push(await runProduction(cfg, live));
-  if (cfg.outreach.enabled) sections.push(await runOutreach(cfg, live, adminId));
+  if (cfg.outreach.enabled) sections.push(await runOutreach(cfg, live, adminId, deliverability.healthy));
 
   const chairman = await chairmanSummary(sections, cfg.mode);
   const report: BoardReport = { mode: cfg.mode, sections, chairman };
