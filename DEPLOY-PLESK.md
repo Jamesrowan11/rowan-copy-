@@ -463,6 +463,36 @@ vendors' consoles, so they can't be driven from this app.
 
 ---
 
+## 12. The AI board (autonomous growth loop)
+
+Admin → **AI board** runs three autonomous directors on a schedule — Growth
+(find leads via Google Places), Production (build + deploy demo sites), and
+Outreach (send the drafted demo email) — then a Chairman AI writes an executive
+summary you read each morning.
+
+**Schedule it** with a Plesk task: Plesk → Tools & Settings → **Scheduled
+Tasks** → Add Task → *Fetch a URL*, daily (e.g. 07:00):
+
+```
+https://rowancopy.com/api/board/run?secret=INBOUND_WEBHOOK_SECRET
+```
+
+(use your real `INBOUND_WEBHOOK_SECRET` value). Safe to schedule aggressively:
+runs are concurrency-guarded and each director is capped per run.
+
+Guardrails, because it spends real money and emails real people:
+
+- **Master kill switch** and per-director toggles in Admin → AI board.
+- **Dry-run mode (the default):** the board plans everything and reports what it
+  *would* do — flip to **Live** only after a dry-run report looks right.
+- **Per-run caps** with hard ceilings in code (25 leads / 10 builds / 20 sends)
+  a mistyped config can't exceed. Places searches and Claude builds are paid
+  calls; outreach uses the normal email layer (SES/SMTP) and is logged.
+- Every run is saved as a report and written to the audit log. Outreach only
+  emails Ready demos with a real address, once (`outreachSentAt`).
+
+---
+
 ## File uploads
 
 Uploaded documents are stored in `app/uploads` (gitignored). Ensure it's

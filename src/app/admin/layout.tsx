@@ -19,6 +19,7 @@ export default async function AdminLayout({
     { href: "/admin/inquiries", label: "Inquiries" },
     { href: "/admin/projects", label: "Projects" },
     { href: "/admin/leads", label: "Lead generator" },
+    { href: "/admin/board", label: "AI board" },
     { href: "/admin/ad-writer", label: "Ad writer" },
     { href: "/admin/mail", label: "Mail" },
     { href: "/admin/messages", label: "Messages", badge: unread || undefined },

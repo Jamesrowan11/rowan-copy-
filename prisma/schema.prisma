@@ -480,11 +480,24 @@ model Demo {
   // None | Checking | ReadyToGoLive | Pending | Live | Failed
   customDomainStatus String   @default("None")
   lastDnsCheck       String?  // latest pre-flight readiness report
+  outreachSentAt     DateTime? // when the AI board (or a human) sent the outreach email
   createdById        String
   createdBy          User     @relation("DemoCreator", fields: [createdById], references: [id])
   convertedProjectId String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+}
+
+// One run of the AI board of directors: what each director did (or would do,
+// in dry-run), plus the chairman's executive summary.
+model BoardRun {
+  id         String   @id @default(cuid())
+  mode       String   // dry-run | live
+  trigger    String   @default("schedule") // schedule | manual
+  actions    Int      @default(0) // total concrete actions taken (or simulated)
+  report     String   // JSON: per-director sections + chairman summary
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
 }
 
 // Simple key-value settings (automation toggles, etc.). Missing keys fall back
