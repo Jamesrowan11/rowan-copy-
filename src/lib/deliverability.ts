@@ -79,23 +79,55 @@ async function checkMx(): Promise<DeliverabilityCheck> {
 }
 
 // PTR must be measured from the OUTSIDE: this server is its own authoritative
-// DNS and can hold a stale local copy of its reverse record, while receiving
-// mail servers only ever see the public answer. Ask Google/Cloudflare directly
-// (fall back to the system resolver if they're unreachable).
+// DNS with a stale local copy of its reverse record, and the box's firewall
+// intercepts outbound port-53 queries (so even "@8.8.8.8" gets the local
+// answer). DNS-over-HTTPS can't be intercepted, so ask Google's and
+// Cloudflare's DoH endpoints; fall back to the system resolver only if both
+// are unreachable.
+type DohAnswer = { Answer?: { type: number; data: string }[] };
+
+async function dohQuery(name: string, type: "PTR" | "A"): Promise<string[]> {
+  const endpoints = [
+    `https://dns.google/resolve?name=${encodeURIComponent(name)}&type=${type}`,
+    `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name)}&type=${type}`,
+  ];
+  const wanted = type === "PTR" ? 12 : 1;
+  for (const url of endpoints) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    try {
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: { accept: "application/dns-json" },
+      });
+      if (!res.ok) continue;
+      const json = (await res.json()) as DohAnswer;
+      const answers = (json.Answer ?? [])
+        .filter((a) => a.type === wanted)
+        .map((a) => a.data.replace(/\.$/, ""));
+      if (answers.length > 0) return answers;
+      // A clean NOERROR/NXDOMAIN with no answers is a real result: nothing there.
+      return [];
+    } catch {
+      /* try the next endpoint */
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw new Error("doh-unreachable");
+}
+
 async function reversePublic(ip: string): Promise<string[]> {
-  const resolver = new dns.Resolver();
-  resolver.setServers(["8.8.8.8", "1.1.1.1"]);
+  const arpa = `${ip.split(".").reverse().join(".")}.in-addr.arpa`;
   try {
-    return await resolver.reverse(ip);
+    return await dohQuery(arpa, "PTR");
   } catch {
     return dns.reverse(ip);
   }
 }
 async function resolve4Public(host: string): Promise<string[]> {
-  const resolver = new dns.Resolver();
-  resolver.setServers(["8.8.8.8", "1.1.1.1"]);
   try {
-    return await resolver.resolve4(host);
+    return await dohQuery(host, "A");
   } catch {
     return dns.resolve4(host);
   }
