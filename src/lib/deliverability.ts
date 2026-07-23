@@ -78,10 +78,33 @@ async function checkMx(): Promise<DeliverabilityCheck> {
   }
 }
 
+// PTR must be measured from the OUTSIDE: this server is its own authoritative
+// DNS and can hold a stale local copy of its reverse record, while receiving
+// mail servers only ever see the public answer. Ask Google/Cloudflare directly
+// (fall back to the system resolver if they're unreachable).
+async function reversePublic(ip: string): Promise<string[]> {
+  const resolver = new dns.Resolver();
+  resolver.setServers(["8.8.8.8", "1.1.1.1"]);
+  try {
+    return await resolver.reverse(ip);
+  } catch {
+    return dns.reverse(ip);
+  }
+}
+async function resolve4Public(host: string): Promise<string[]> {
+  const resolver = new dns.Resolver();
+  resolver.setServers(["8.8.8.8", "1.1.1.1"]);
+  try {
+    return await resolver.resolve4(host);
+  } catch {
+    return dns.resolve4(host);
+  }
+}
+
 async function checkPtr(): Promise<DeliverabilityCheck> {
   let names: string[] = [];
   try {
-    names = await dns.reverse(SERVER_IP);
+    names = await reversePublic(SERVER_IP);
   } catch {
     return { name: "Reverse DNS (PTR)", ok: false, critical: true, detail: `No PTR record for ${SERVER_IP}. Set it to mail.${MAIL_DOMAIN} in EC2 → Elastic IPs → Update reverse DNS.` };
   }
@@ -92,7 +115,7 @@ async function checkPtr(): Promise<DeliverabilityCheck> {
   }
   // Forward-confirm: the PTR name should resolve back to the IP.
   try {
-    const back = await dns.resolve4(ptr);
+    const back = await resolve4Public(ptr);
     if (!back.includes(SERVER_IP)) {
       return { name: "Reverse DNS (PTR)", ok: false, critical: true, detail: `PTR "${ptr}" doesn't resolve back to ${SERVER_IP} — add that A record.` };
     }
