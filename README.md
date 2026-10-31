@@ -21,6 +21,56 @@ Published sites live at `https://your-domain/s/<site-name>`.
 
 As the owner, you get `admin.php`, which shows all customers, sites and this month's AI token usage.
 
+## Setup on Plesk (Ubuntu)
+
+Replace `rowancopy.com` below with your domain.
+
+1. **Add the domain:** Websites & Domains → Add Domain. Document root: `httpdocs`.
+2. **PHP:** on the domain, open **PHP** (PHP Settings). Choose **PHP 8.3** (8.1 or newer works), handler **"FPM application served by Apache"**, and set `max_execution_time` to `600` and `upload_max_filesize` / `post_max_size` to `10M`. Click OK.
+3. **SSL:** **SSL/TLS Certificates** → install a free Let's Encrypt certificate. Then in **Hosting Settings**, tick **Permanent SEO-safe 301 redirect from HTTP to HTTPS**.
+4. **Get the code.** Either:
+   - **Git extension:** **Git** → Remote repository → `https://github.com/jamesrowan11/rowan-copy-.git` (a private repo needs the SSH URL plus the deploy key Plesk shows you, added in GitHub → Settings → Deploy keys). Pick the branch to deploy and set the deployment path to `/httpdocs`.
+   - **Or SSH** as root (the folder must be empty: delete Plesk's default `index.html` and its other placeholder files first):
+     ```bash
+     cd /var/www/vhosts/rowancopy.com/httpdocs
+     git clone https://github.com/jamesrowan11/rowan-copy-.git .
+     ```
+5. **Install the PHP libraries** (SSH as root):
+   ```bash
+   cd /var/www/vhosts/rowancopy.com/httpdocs
+   /opt/plesk/php/8.3/bin/php /usr/local/bin/composer install --no-dev --optimize-autoloader
+   ```
+   No `composer` yet? Install it first: `curl -sS https://getcomposer.org/installer | /opt/plesk/php/8.3/bin/php -- --install-dir=/usr/local/bin --filename=composer`.
+   You can also use the **PHP Composer** extension in the Plesk panel instead.
+6. **Config:**
+   ```bash
+   cp config.sample.php config.php
+   nano config.php
+   ```
+   Set `base_url` (`https://rowancopy.com`), `anthropic_api_key`, `admin_emails`, and
+   `'data_dir' => '/var/www/vhosts/rowancopy.com/private/rowancopy'` (Plesk's `private` folder is outside the public web root).
+7. **File ownership.** If you used SSH as root, give the files to the domain's system user so PHP can write uploads and the database. The user is shown under **Hosting Settings → System user**:
+   ```bash
+   chown -R THE_SYSTEM_USER:psacln /var/www/vhosts/rowancopy.com/httpdocs
+   mkdir -p /var/www/vhosts/rowancopy.com/private/rowancopy
+   chown -R THE_SYSTEM_USER:psacln /var/www/vhosts/rowancopy.com/private/rowancopy
+   chmod 700 /var/www/vhosts/rowancopy.com/private/rowancopy
+   ```
+8. **nginx directives.** Plesk puts nginx in front of Apache, and nginx serves static files itself, skipping `.htaccess`. Under **Apache & nginx Settings → Additional nginx directives**, paste:
+   ```nginx
+   location ~ ^/(vendor|lib)/ { deny all; }
+   location ~ ^/(config\.php|config\.sample\.php|composer\.(json|lock)|README\.md)$ { deny all; }
+   location ~ /\.(?!well-known) { deny all; }
+   proxy_read_timeout 600s;
+   ```
+   If Plesk rejects the last line as a duplicate, delete just that line and save again.
+   Leave **Proxy mode** on so `.htaccess` (pretty `/s/site-name` links, upload protection) keeps working.
+9. Open `https://rowancopy.com`, create your account (use the email you put in `admin_emails`), and build a test site.
+
+Updating later: `git pull` (or **Pull Updates** in the Git extension), then rerun the `composer install` command.
+
+Back up `/var/www/vhosts/rowancopy.com/private/rowancopy` (the database) and `httpdocs/uploads` (customer images). Plesk's Backup Manager covers both.
+
 ## Setup on cPanel
 
 1. **Create a subdomain or domain** for the app (for example `rowancopy.com` or `app.rowancopy.com`) and note its document root folder.
