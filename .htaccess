@@ -1,0 +1,21 @@
+# Rowan Copy: Apache / LiteSpeed rules (cPanel)
+Options -Indexes
+DirectoryIndex index.php
+
+# Never serve private files: config, code libraries, Composer files, dotfiles
+<FilesMatch "^(config\.php|config\.sample\.php|composer\.(json|lock)|README\.md)$">
+    Require all denied
+</FilesMatch>
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+RewriteEngine On
+# Block lib/ and vendor/ folders entirely
+RewriteRule ^(lib|vendor)(/|$) - [F,L]
+# Pretty URLs for customer sites: /s/my-bakery -> site.php?s=my-bakery
+RewriteRule ^s/([a-z0-9-]+)/?$ site.php?s=$1 [L,QSA]
+
+# Force HTTPS (uncomment once your SSL certificate is active)
+# RewriteCond %{HTTPS} off
+# RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]

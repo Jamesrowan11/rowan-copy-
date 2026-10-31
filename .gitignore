@@ -1,0 +1,5 @@
+/config.php
+/vendor/
+/uploads/*
+!/uploads/.htaccess
+.DS_Store
