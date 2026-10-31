@@ -17,18 +17,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!throttle('login:' . client_ip(), 10, 900) || !throttle('login:' . $email, 10, 900)) {
         $error = 'Too many login attempts. Please wait 15 minutes and try again.';
     } else {
-        $stmt = db()->prepare('SELECT id, password_hash FROM users WHERE email = ?');
+        $stmt = db()->prepare('SELECT id, password_hash, suspended FROM users WHERE email = ?');
         $stmt->execute([$email]);
         $row = $stmt->fetch();
-        if ($row && password_verify($password, $row['password_hash'])) {
+        if ($row && password_verify($password, $row['password_hash']) && $row['suspended']) {
+            $error = 'This account has been suspended. Please contact support.';
+        } elseif ($row && password_verify($password, $row['password_hash'])) {
             if (password_needs_rehash($row['password_hash'], PASSWORD_DEFAULT)) {
                 db()->prepare('UPDATE users SET password_hash = ? WHERE id = ?')
                     ->execute([password_hash($password, PASSWORD_DEFAULT), $row['id']]);
             }
             log_in((int) $row['id']);
             redirect('dashboard.php');
+        } else {
+            $error = 'That email and password don\'t match.';
         }
-        $error = 'That email and password don\'t match.';
     }
 }
 
@@ -41,6 +44,7 @@ page_header('Log in', 'auth');
     <?= csrf_field() ?>
     <label>Email <input type="email" name="email" required value="<?= h($email) ?>" autocomplete="email"></label>
     <label>Password <input type="password" name="password" required autocomplete="current-password"></label>
+    <p class="small" style="margin:-8px 0 14px"><a href="<?= h(base_url('forgot.php')) ?>">Forgot your password?</a></p>
     <button class="btn btn-block">Log in</button>
   </form>
   <p class="muted small">New here? <a href="<?= h(base_url('register.php')) ?>">Create an account</a></p>

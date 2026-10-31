@@ -47,7 +47,7 @@ function page_footer(): void
 {
     ?>
 </main>
-<footer class="foot">© <?= date('Y') ?> Rowan Copy · Websites built by describing your business.</footer>
+<footer class="foot">© <?= date('Y') ?> Rowan Copy · <a href="<?= h(base_url('terms.php')) ?>">Terms</a> · <a href="<?= h(base_url('privacy.php')) ?>">Privacy</a></footer>
 </body>
 </html>
 <?php

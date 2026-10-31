@@ -23,7 +23,7 @@ $isCreate = !$site['current_version_id'] || ($_POST['mode'] ?? '') === 'rebuild'
 if (!$isCreate && mb_strlen($instruction) < 3) {
     json_out(['error' => 'Tell us what you would like to change.'], 422);
 }
-if (ai_uses_this_month((int) $user['id']) >= ai_limit()) {
+if (ai_uses_this_month((int) $user['id']) >= ai_limit($user)) {
     json_out(['error' => 'You have used all of this month\'s AI designs and edits. Your allowance resets on the 1st.'], 429);
 }
 if (!throttle('gen:' . $user['id'], 3, 60)) {

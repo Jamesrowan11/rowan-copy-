@@ -30,8 +30,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             db()->prepare('UPDATE users SET password_hash = ? WHERE id = ?')
                 ->execute([password_hash($new, PASSWORD_DEFAULT), $user['id']]);
+            bump_session_version((int) $user['id']); // sign out other devices
             log_in((int) $user['id']);
-            flash('Password changed.');
+            flash('Password changed. Any other devices have been logged out.');
+            redirect('account.php');
+        }
+    } elseif ($action === 'email') {
+        $newEmail = strtolower(post_str('email', 200));
+        $stmt = db()->prepare('SELECT password_hash FROM users WHERE id = ?');
+        $stmt->execute([$user['id']]);
+        $taken = db()->prepare('SELECT 1 FROM users WHERE email = ? AND id != ?');
+        $taken->execute([$newEmail, $user['id']]);
+        if (!filter_var($newEmail, FILTER_VALIDATE_EMAIL)) {
+            $error = 'Please enter a valid email address.';
+        } elseif (!password_verify((string) ($_POST['email_password'] ?? ''), (string) $stmt->fetchColumn())) {
+            $error = 'Your password is incorrect.';
+        } elseif ($taken->fetchColumn()) {
+            $error = 'Another account already uses that email.';
+        } elseif ($newEmail !== strtolower($user['email'])) {
+            db()->prepare('UPDATE users SET email = ?, email_verified_at = NULL WHERE id = ?')->execute([$newEmail, $user['id']]);
+            if (verification_required()) {
+                send_verification_email(['id' => $user['id'], 'name' => $user['name'], 'email' => $newEmail]);
+                flash('Email updated. We sent a confirmation link to ' . $newEmail . '.');
+            } else {
+                flash('Email updated.');
+            }
             redirect('account.php');
         }
     } elseif ($action === 'delete') {
@@ -66,14 +89,24 @@ page_header('Account');
     <form method="post">
       <?= csrf_field() ?><input type="hidden" name="action" value="profile">
       <label>Name <input name="name" required maxlength="100" value="<?= h($user['name']) ?>"></label>
-      <label>Email <input value="<?= h($user['email']) ?>" disabled></label>
       <button class="btn">Save</button>
     </form>
   </div>
 
   <div class="card">
+    <h2>Email address</h2>
+    <p class="muted small">Currently <strong><?= h($user['email']) ?></strong><?= is_verified($user) ? '' : ' (not confirmed yet)' ?></p>
+    <form method="post">
+      <?= csrf_field() ?><input type="hidden" name="action" value="email">
+      <label>New email <input type="email" name="email" required maxlength="200" autocomplete="email"></label>
+      <label>Your password <input type="password" name="email_password" required autocomplete="current-password"></label>
+      <button class="btn">Change email</button>
+    </form>
+  </div>
+
+  <div class="card">
     <h2>AI usage</h2>
-    <p>You've used <strong><?= $used ?></strong> of <strong><?= ai_limit() ?></strong> AI designs and edits this month. Your allowance resets on the 1st.</p>
+    <p>You've used <strong><?= $used ?></strong> of <strong><?= ai_limit($user) ?></strong> AI designs and edits this month. Your allowance resets on the 1st.</p>
   </div>
 
   <div class="card">

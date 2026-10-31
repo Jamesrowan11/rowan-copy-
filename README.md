@@ -8,18 +8,31 @@ Built with plain PHP and SQLite, so it runs on ordinary cPanel / GoDaddy shared 
 
 | Feature | Where |
 |---|---|
-| Sign up, log in, change password, delete account | `register.php`, `login.php`, `account.php` |
+| Sign up, log in, change password or email, delete account | `register.php`, `login.php`, `account.php` |
+| Forgot-password emails with one-hour, single-use reset links | `forgot.php`, `reset.php` |
+| Email confirmation (required before publishing, when email is set up) | `verify.php` |
 | Create up to 10 websites by describing them | `dashboard.php` |
 | Chat-style AI editing with a live preview (desktop and phone views) | `editor.php` |
 | Publish / take offline; drafts don't affect the live site until published | Editor → Publish |
 | Full version history with one-click restore | Editor → History |
 | Upload logo and photos for the AI to use | Editor → Images |
 | Change the site name and web address | Editor → Settings |
-| Contact-form inbox, with optional email alerts | `inbox.php` |
+| Connect their own domain (e.g. `mybakery.com`) | Editor → Settings |
+| Download the site as an HTML file, duplicate a site, edit the code by hand | Editor → Settings → Tools |
+| Visitor counts (today / 7 days / 30 days), no cookies | Editor → Visitors |
+| Contact-form inbox with email alerts, mark unread, spreadsheet (CSV) download | `inbox.php` |
 
 Published sites live at `https://your-domain/s/<site-name>`.
 
-As the owner, you get `admin.php`, which shows all customers, sites and this month's AI token usage.
+As the owner, you get `admin.php`. It shows all customers, sites, visits and this month's AI token usage, and lets you:
+- suspend or restore a customer (their sites go offline while suspended)
+- take down or restore a single site
+- raise or lower one customer's monthly AI limit
+- mark an email as confirmed
+- create a password reset link to send to a customer by hand
+- see which custom domains you still need to connect
+
+Starter **Terms of Service** and **Privacy Policy** pages are at `terms.php` and `privacy.php`. They are templates: fill in the bracketed parts and have a lawyer review them before launch.
 
 ## Setup on Plesk (Ubuntu)
 
@@ -47,8 +60,10 @@ Replace `rowancopy.com` below with your domain.
    cp config.sample.php config.php
    nano config.php
    ```
-   Set `base_url` (`https://rowancopy.com`), `anthropic_api_key`, `admin_emails`, and
+   Set `base_url` (`https://rowancopy.com`), `anthropic_api_key`, `admin_emails`, `support_email`, `server_ip` (your server's public IP), and
    `'data_dir' => '/var/www/vhosts/rowancopy.com/private/rowancopy'` (Plesk's `private` folder is outside the public web root).
+
+   **Email:** in Plesk → **Mail**, create a mailbox such as `noreply@rowancopy.com`, then set `'mail_from' => 'noreply@rowancopy.com'`. Password resets, email confirmations and new-message alerts all use it. Until it's set, email is off and customers can publish without confirming their email. To keep emails out of spam, turn on DKIM for the domain (Mail → Mail Settings) and make sure the domain's DNS has SPF and DMARC records. Plesk adds these automatically when it manages your DNS.
 7. **File ownership.** If you used SSH as root, give the files to the domain's system user so PHP can write uploads and the database. The user is shown under **Hosting Settings → System user**:
    ```bash
    chown -R THE_SYSTEM_USER:psacln /var/www/vhosts/rowancopy.com/httpdocs
@@ -66,6 +81,11 @@ Replace `rowancopy.com` below with your domain.
    If Plesk rejects the last line as a duplicate, delete just that line and save again.
    Leave **Proxy mode** on so `.htaccess` (pretty `/s/site-name` links, upload protection) keeps working.
 9. Open `https://rowancopy.com`, create your account (use the email you put in `admin_emails`), and build a test site.
+
+**Connecting a customer's own domain.** When a customer adds a domain in their site settings, it shows up on `admin.php` under "Custom domains to connect". Once the customer has pointed the domain's DNS at your server:
+1. In Plesk, open the Rowan Copy domain → **Domain Aliases** → **Add Domain Alias**, enter the customer's domain (e.g. `joesplumbing.com`, with "www" included), and untick mail service.
+2. Open **SSL/TLS Certificates** for the Rowan Copy domain and reissue the Let's Encrypt certificate with the alias included.
+Visitors to that domain then see the customer's published site.
 
 Updating later: `git pull` (or **Pull Updates** in the Git extension), then rerun the `composer install` command.
 
@@ -111,8 +131,7 @@ Every design or edit is one Claude API call. To protect your API bill:
 
 ## Not built yet (good next steps)
 
-- Password reset by email
-- Paid plans and billing (for example Stripe), tied to `monthly_ai_limit`
-- Custom domains for customer sites (e.g. `mybakery.com`)
+- Paid plans and billing (for example Stripe), tied to each customer's AI limit
 - Multi-page sites (each site is currently one page with sections)
-- Terms of service and an abuse-reporting process for customer content
+- Automatic SSL for customer domains (today you add each one as a Plesk domain alias)
+- Two-factor login

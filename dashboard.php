@@ -26,7 +26,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $stmt = db()->prepare(
-    'SELECT s.*, (SELECT COUNT(*) FROM submissions m WHERE m.site_id = s.id AND m.is_read = 0) AS unread
+    'SELECT s.*, (SELECT COUNT(*) FROM submissions m WHERE m.site_id = s.id AND m.is_read = 0) AS unread,
+            (SELECT COALESCE(SUM(views), 0) FROM page_views p WHERE p.site_id = s.id AND p.day >= date(\'now\', \'-29 days\')) AS views30
      FROM sites s WHERE s.user_id = ? ORDER BY s.updated_at DESC'
 );
 $stmt->execute([$user['id']]);
@@ -39,9 +40,16 @@ page_header('My sites');
   <div class="page-head">
     <div>
       <h1>Hi, <?= h(strtok($user['name'], ' ')) ?></h1>
-      <p class="muted"><?= $used ?> of <?= ai_limit() ?> AI designs and edits used this month.</p>
+      <p class="muted"><?= $used ?> of <?= ai_limit($user) ?> AI designs and edits used this month.</p>
     </div>
   </div>
+
+  <?php if (!is_verified($user)): ?>
+    <div class="notice">
+      <span>📧 Please confirm your email (<?= h($user['email']) ?>) so you can publish your websites.</span>
+      <form method="post" action="<?= h(base_url('verify.php')) ?>" class="inline"><?= csrf_field() ?><button class="btn btn-sm btn-ghost">Resend link</button></form>
+    </div>
+  <?php endif; ?>
 
   <?php if ($sites): ?>
   <div class="site-grid">
@@ -49,13 +57,16 @@ page_header('My sites');
       <a class="site-card" href="<?= h(base_url('editor.php?id=' . $s['id'])) ?>">
         <div class="site-card-top">
           <strong><?= h($s['name']) ?></strong>
-          <?php if ($s['published_version_id']): ?>
+          <?php if ($s['taken_down']): ?>
+            <span class="badge badge-down">Taken down</span>
+          <?php elseif ($s['published_version_id']): ?>
             <span class="badge badge-live">Live</span>
           <?php else: ?>
             <span class="badge">Draft</span>
           <?php endif; ?>
         </div>
-        <span class="muted small"><?= h(site_url($s['slug'])) ?></span>
+        <span class="muted small"><?= h(public_url($s)) ?></span>
+        <span class="muted small"><?= number_format((int) $s['views30']) ?> visit<?= $s['views30'] == 1 ? '' : 's' ?> in the last 30 days</span>
         <?php if ($s['unread']): ?><span class="badge badge-msg"><?= (int) $s['unread'] ?> new message<?= $s['unread'] > 1 ? 's' : '' ?></span><?php endif; ?>
       </a>
     <?php endforeach; ?>
@@ -80,8 +91,8 @@ page_header('My sites');
         <span class="chip" data-add="Make it look modern and minimal.">+ Modern &amp; minimal</span>
         <span class="chip" data-add="Make it bold and colorful.">+ Bold &amp; colorful</span>
       </div>
-      <button class="btn btn-lg" <?= $used >= ai_limit() ? 'disabled' : '' ?>>✨ Build my website</button>
-      <?php if ($used >= ai_limit()): ?><p class="error small">You've reached this month's AI limit.</p><?php endif; ?>
+      <button class="btn btn-lg" <?= $used >= ai_limit($user) ? 'disabled' : '' ?>>✨ Build my website</button>
+      <?php if ($used >= ai_limit($user)): ?><p class="error small">You've reached this month's AI limit.</p><?php endif; ?>
     </form>
   </div>
 </div>

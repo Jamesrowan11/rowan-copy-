@@ -114,7 +114,45 @@ function migrate(PDO $pdo): void
     CREATE INDEX IF NOT EXISTS idx_submissions_site ON submissions(site_id);
     CREATE INDEX IF NOT EXISTS idx_usage_user ON ai_usage(user_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_throttle ON throttle(bucket, created_at);
+    CREATE TABLE IF NOT EXISTS tokens (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        purpose TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        expires_at INTEGER NOT NULL,
+        used_at INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS page_views (
+        site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+        day TEXT NOT NULL,
+        views INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (site_id, day)
+    );
     SQL);
+
+    // Columns added after the first release. Existing installs get them automatically.
+    if (add_column($pdo, 'users', 'email_verified_at', 'TEXT')) {
+        // Accounts created before verification existed are trusted as-is.
+        $pdo->exec('UPDATE users SET email_verified_at = created_at');
+    }
+    add_column($pdo, 'users', 'session_version', 'INTEGER NOT NULL DEFAULT 1');
+    add_column($pdo, 'users', 'suspended', 'INTEGER NOT NULL DEFAULT 0');
+    add_column($pdo, 'users', 'ai_limit_override', 'INTEGER');
+    add_column($pdo, 'sites', 'custom_domain', 'TEXT');
+    add_column($pdo, 'sites', 'taken_down', 'INTEGER NOT NULL DEFAULT 0');
+    $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_domain ON sites(custom_domain)');
+}
+
+/** Add a column if it doesn't exist yet. Returns true when it was added. */
+function add_column(PDO $pdo, string $table, string $column, string $definition): bool
+{
+    foreach ($pdo->query("PRAGMA table_info($table)") as $col) {
+        if ($col['name'] === $column) {
+            return false;
+        }
+    }
+    $pdo->exec("ALTER TABLE $table ADD COLUMN $column $definition");
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -149,9 +187,21 @@ function current_user(): ?array
     if (!$id) {
         return $user = null;
     }
-    $stmt = db()->prepare('SELECT id, email, name, created_at FROM users WHERE id = ?');
+    $stmt = db()->prepare('SELECT id, email, name, created_at, email_verified_at, session_version, suspended, ai_limit_override FROM users WHERE id = ?');
     $stmt->execute([$id]);
-    return $user = ($stmt->fetch() ?: null);
+    $row = $stmt->fetch();
+    // A password change or reset bumps session_version, which logs out every other device.
+    if (!$row || $row['suspended'] || (int) ($_SESSION['sv'] ?? 0) !== (int) $row['session_version']) {
+        $_SESSION = [];
+        return $user = null;
+    }
+    return $user = $row;
+}
+
+/** Log the user out everywhere else (call after password changes). */
+function bump_session_version(int $userId): void
+{
+    db()->prepare('UPDATE users SET session_version = session_version + 1 WHERE id = ?')->execute([$userId]);
 }
 
 function require_login(): array
@@ -176,7 +226,99 @@ function log_in(int $userId): void
 {
     start_session();
     session_regenerate_id(true);
+    $stmt = db()->prepare('SELECT session_version FROM users WHERE id = ?');
+    $stmt->execute([$userId]);
     $_SESSION['uid'] = $userId;
+    $_SESSION['sv'] = (int) $stmt->fetchColumn();
+}
+
+// ---------------------------------------------------------------------------
+// Email
+// ---------------------------------------------------------------------------
+
+function mail_from(): string
+{
+    return (string) (cfg('mail_from') ?: cfg('notify_email_from', ''));
+}
+
+function mail_enabled(): bool
+{
+    return filter_var(mail_from(), FILTER_VALIDATE_EMAIL) !== false;
+}
+
+/** Send a plain-text email through the server's mail system. Returns false if email isn't set up. */
+function send_email(string $to, string $subject, string $body): bool
+{
+    if (!mail_enabled() || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        return false;
+    }
+    $from = mail_from();
+    $subject = mb_encode_mimeheader(preg_replace('/[\r\n]+/', ' ', $subject) ?? '', 'UTF-8');
+    $headers = implode("\r\n", [
+        'From: Rowan Copy <' . $from . '>',
+        'MIME-Version: 1.0',
+        'Content-Type: text/plain; charset=UTF-8',
+        'Content-Transfer-Encoding: 8bit',
+    ]);
+    $ok = @mail($to, $subject, $body, $headers, '-f' . $from);
+    if (!$ok) {
+        error_log("Rowan Copy: could not send email to $to");
+    }
+    return $ok;
+}
+
+/** Whether customers must confirm their email before publishing. Off when email isn't set up. */
+function verification_required(): bool
+{
+    return (bool) cfg('require_email_verification', true) && mail_enabled();
+}
+
+function is_verified(array $user): bool
+{
+    return !verification_required() || !empty($user['email_verified_at']);
+}
+
+// ---------------------------------------------------------------------------
+// One-time links (password reset, email verification). Only a hash is stored.
+// ---------------------------------------------------------------------------
+
+function create_token(int $userId, string $purpose, int $ttlSeconds): string
+{
+    $token = bin2hex(random_bytes(32));
+    db()->prepare('DELETE FROM tokens WHERE user_id = ? AND purpose = ? AND used_at IS NULL')->execute([$userId, $purpose]);
+    db()->prepare('INSERT INTO tokens (user_id, purpose, token_hash, expires_at) VALUES (?, ?, ?, ?)')
+        ->execute([$userId, $purpose, hash('sha256', $token), time() + $ttlSeconds]);
+    return $token;
+}
+
+/** Returns the token row if valid (not used, not expired), without consuming it. */
+function find_token(string $token, string $purpose): ?array
+{
+    if (!preg_match('/^[a-f0-9]{64}$/', $token)) {
+        return null;
+    }
+    $stmt = db()->prepare('SELECT * FROM tokens WHERE token_hash = ? AND purpose = ? AND used_at IS NULL AND expires_at > ?');
+    $stmt->execute([hash('sha256', $token), $purpose, time()]);
+    return $stmt->fetch() ?: null;
+}
+
+function use_token(int $tokenId): void
+{
+    db()->prepare('UPDATE tokens SET used_at = ? WHERE id = ?')->execute([time(), $tokenId]);
+}
+
+function send_verification_email(array $user): bool
+{
+    $token = create_token((int) $user['id'], 'verify', 7 * 86400);
+    return send_email($user['email'], 'Confirm your email for Rowan Copy',
+        "Hi {$user['name']},\n\nPlease confirm your email address by opening this link:\n\n"
+        . base_url('verify.php?token=' . $token)
+        . "\n\nThe link works for 7 days. If you didn't create a Rowan Copy account, you can ignore this email.\n\n- Rowan Copy\n");
+}
+
+function password_reset_link(int $userId): string
+{
+    return base_url('reset.php?token=' . create_token($userId, 'reset', 3600));
 }
 
 /** Load a site and make sure the logged-in user owns it. */
@@ -257,8 +399,12 @@ function ai_uses_this_month(int $userId): int
     return (int) $stmt->fetchColumn();
 }
 
-function ai_limit(): int
+/** Monthly AI allowance; an admin can raise it for one customer. */
+function ai_limit(?array $user = null): int
 {
+    if ($user && $user['ai_limit_override'] !== null) {
+        return (int) $user['ai_limit_override'];
+    }
     return (int) cfg('monthly_ai_limit', 40);
 }
 
@@ -320,11 +466,71 @@ function uploads_dir(int $siteId): string
     return RC_ROOT . '/uploads/' . $siteId;
 }
 
+/** Public address of a site: its custom domain if connected, otherwise /s/slug. */
+function public_url(array $site): string
+{
+    return !empty($site['custom_domain']) ? 'https://' . $site['custom_domain'] : site_url($site['slug']);
+}
+
 /** Fill in the placeholders the AI puts in generated HTML. */
 function render_site_html(string $html, array $site): string
 {
     return str_replace('{{FORM_ACTION}}', h(base_url('form.php?s=' . rawurlencode($site['slug']))), $html);
 }
+
+/** Lowercase a hostname typed by a customer and strip any http:// or path. Returns '' if invalid. */
+function normalize_domain(string $input): string
+{
+    $d = strtolower(trim($input));
+    $d = preg_replace('#^https?://#', '', $d) ?? '';
+    $d = rtrim(explode('/', $d)[0], '.');
+    $ok = strlen($d) <= 253
+        && preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/', $d);
+    $appHost = strtolower((string) parse_url((string) cfg('base_url'), PHP_URL_HOST));
+    return $ok && $d !== $appHost ? $d : '';
+}
+
+/**
+ * Serve a published customer site (from /s/slug or a custom domain) and count the visit.
+ * Sites are shown in a browser sandbox so their scripts can't touch Rowan Copy accounts.
+ */
+function serve_site(?array $site): never
+{
+    if (!$site || $site['taken_down'] || !empty($site['owner_suspended'])) {
+        http_response_code(404);
+        header('Content-Type: text/html; charset=utf-8');
+        echo '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Site not found</title>'
+            . '<body style="font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:90vh;color:#333;background:#faf8f5;margin:0">'
+            . '<div style="text-align:center;padding:16px"><h1>This website isn’t available</h1><p>It may not be published yet.</p>'
+            . '<p><a href="' . h(base_url()) . '">Build your own with Rowan Copy</a></p></div>';
+        exit;
+    }
+
+    // Count real visits (skip bots and link previews). No cookies, no personal data.
+    $ua = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
+    if ($ua !== '' && !preg_match('/bot|crawl|spider|slurp|preview|facebookexternalhit|curl|wget|python|monitor/i', $ua)) {
+        db()->prepare('INSERT INTO page_views (site_id, day, views) VALUES (?, date(\'now\'), 1)
+                       ON CONFLICT(site_id, day) DO UPDATE SET views = views + 1')->execute([$site['id']]);
+    }
+
+    $html = render_site_html($site['html'], $site);
+    if (cfg('show_badge', true)) {
+        $badge = '<a href="' . h(base_url()) . '" target="_blank" rel="noopener" style="position:fixed;right:12px;bottom:12px;z-index:2147483647;'
+            . 'background:#7a2e1f;color:#fff;font:600 12px/1 system-ui,sans-serif;padding:8px 12px;border-radius:999px;text-decoration:none;'
+            . 'box-shadow:0 2px 8px rgba(0,0,0,.2)">Made with Rowan Copy</a>';
+        $pos = strripos($html, '</body>');
+        $html = $pos === false ? $html . $badge : substr_replace($html, $badge, $pos, 0);
+    }
+
+    header('Content-Type: text/html; charset=utf-8');
+    header('Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
+    header('Cache-Control: no-cache');
+    echo $html;
+    exit;
+}
+
+const SITE_SERVE_SQL = 'SELECT s.*, v.html, u.suspended AS owner_suspended FROM sites s
+    JOIN versions v ON v.id = s.published_version_id JOIN users u ON u.id = s.user_id';
 
 // ---------------------------------------------------------------------------
 // Small helpers

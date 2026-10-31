@@ -22,6 +22,15 @@ $unread = db()->prepare('SELECT COUNT(*) FROM submissions WHERE site_id = ? AND 
 $unread->execute([$site['id']]);
 $unread = (int) $unread->fetchColumn();
 
+$views = db()->prepare("SELECT
+    COALESCE(SUM(CASE WHEN day = date('now') THEN views END), 0) AS today,
+    COALESCE(SUM(CASE WHEN day >= date('now', '-6 days') THEN views END), 0) AS week,
+    COALESCE(SUM(views), 0) AS month
+    FROM page_views WHERE site_id = ? AND day >= date('now', '-29 days')");
+$views->execute([$site['id']]);
+$views = $views->fetch();
+$appHost = (string) parse_url((string) cfg('base_url'), PHP_URL_HOST);
+
 $state = [
     'siteId' => (int) $site['id'],
     'csrf' => csrf_token(),
@@ -31,7 +40,8 @@ $state = [
     'versions' => $versions,
     'images' => $images,
     'used' => ai_uses_this_month((int) $user['id']),
-    'limit' => ai_limit(),
+    'verified' => is_verified($user),
+    'limit' => ai_limit($user),
     'autoBuild' => !$site['current_version_id'] && isset($_GET['build']),
     'urls' => [
         'generate' => base_url('api/generate.php'),
@@ -49,7 +59,7 @@ page_header('Editing ' . $site['name'], 'editor-page');
       <h1 id="site-name"><?= h($site['name']) ?></h1>
       <div class="status-row">
         <span id="status-badge" class="badge"></span>
-        <a id="live-link" class="small" href="<?= h(site_url($site['slug'])) ?>" target="_blank" rel="noopener"><?= h(site_url($site['slug'])) ?></a>
+        <a id="live-link" class="small" href="<?= h(public_url($site)) ?>" target="_blank" rel="noopener"><?= h(public_url($site)) ?></a>
       </div>
       <div class="btn-row">
         <button id="publish-btn" class="btn">Publish</button>
@@ -61,6 +71,7 @@ page_header('Editing ' . $site['name'], 'editor-page');
       <button class="tab active" data-tab="chat">Design</button>
       <button class="tab" data-tab="images">Images</button>
       <button class="tab" data-tab="history">History</button>
+      <button class="tab" data-tab="stats">Visitors</button>
       <button class="tab" data-tab="settings">Settings</button>
     </div>
 
@@ -100,6 +111,15 @@ page_header('Editing ' . $site['name'], 'editor-page');
       <ul id="history-list" class="history-list"></ul>
     </section>
 
+    <section class="tab-body" data-body="stats" hidden>
+      <div class="stat-row">
+        <div class="stat"><strong><?= number_format((int) $views['today']) ?></strong><span>today</span></div>
+        <div class="stat"><strong><?= number_format((int) $views['week']) ?></strong><span>last 7 days</span></div>
+        <div class="stat"><strong><?= number_format((int) $views['month']) ?></strong><span>last 30 days</span></div>
+      </div>
+      <p class="muted small">Page visits to your published site. Search engines and bots aren't counted, and no cookies are used.</p>
+    </section>
+
     <section class="tab-body" data-body="settings" hidden>
       <form id="settings-form">
         <label>Site name <input name="name" maxlength="80" value="<?= h($site['name']) ?>" required></label>
@@ -111,6 +131,34 @@ page_header('Editing ' . $site['name'], 'editor-page');
         </label>
         <button class="btn">Save settings</button>
       </form>
+      <hr>
+      <h2>Your own domain</h2>
+      <p class="muted small">Use a domain you own (like <em>mybakery.com</em>) instead of the Rowan Copy address.</p>
+      <form id="domain-form">
+        <label>Domain <input name="domain" maxlength="253" placeholder="mybakery.com" value="<?= h($site['custom_domain']) ?>"></label>
+        <button class="btn btn-sm">Save domain</button>
+      </form>
+      <div id="domain-help" class="muted small" <?= $site['custom_domain'] ? '' : 'hidden' ?>>
+        <p><strong>Next steps:</strong> at the company where you bought the domain, open its DNS settings and
+        <?php if (cfg('server_ip')): ?>
+          add an <strong>A record</strong> for <code>@</code> and for <code>www</code> pointing to <code><?= h((string) cfg('server_ip')) ?></code>.
+        <?php else: ?>
+          add a <strong>CNAME record</strong> for <code>www</code> pointing to <code><?= h($appHost) ?></code>.
+        <?php endif; ?>
+        Then email us so we can switch on the secure (https) certificate. It can take up to 24 hours to start working.</p>
+      </div>
+      <hr>
+      <h2>Tools</h2>
+      <div class="row-actions">
+        <a class="btn btn-ghost btn-sm" href="<?= h(base_url('download.php?id=' . $site['id'])) ?>">Download HTML</a>
+        <button id="duplicate-site" class="btn btn-ghost btn-sm">Duplicate site</button>
+        <button id="toggle-code" class="btn btn-ghost btn-sm">Edit code (advanced)</button>
+      </div>
+      <div id="code-panel" hidden>
+        <p class="muted small">For people who know HTML. Saving creates a new version you can undo from History.</p>
+        <textarea id="code" class="code-area" spellcheck="false"></textarea>
+        <button id="save-code" class="btn btn-sm">Save code</button>
+      </div>
       <hr>
       <button id="delete-site" class="btn btn-danger btn-sm">Delete this website</button>
     </section>

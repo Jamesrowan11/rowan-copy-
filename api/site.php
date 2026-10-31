@@ -1,7 +1,7 @@
 <?php
 // ============================================================================
 // POST api/site.php: everything in the editor that isn't AI.
-// action = publish | unpublish | restore | settings | delete | upload | delete_image
+// action = publish | unpublish | restore | settings | domain | get_html | save_html | duplicate | delete | upload | delete_image
 // ============================================================================
 
 require __DIR__ . '/../lib/bootstrap.php';
@@ -24,9 +24,15 @@ switch ($_POST['action'] ?? '') {
         if (!$site['current_version_id']) {
             json_out(['error' => 'Build your site before publishing.'], 422);
         }
+        if (!is_verified($user)) {
+            json_out(['error' => 'Please confirm your email address first. Check your inbox for our link, or resend it from My sites.'], 403);
+        }
+        if ($site['taken_down']) {
+            json_out(['error' => 'This site was taken down by Rowan Copy. Please contact support.'], 403);
+        }
         $pdo->prepare('UPDATE sites SET published_version_id = current_version_id, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
             ->execute([$siteId]);
-        json_out(['ok' => true, 'url' => site_url($site['slug']), 'published_version_id' => (int) $site['current_version_id']]);
+        json_out(['ok' => true, 'url' => public_url($site), 'published_version_id' => (int) $site['current_version_id']]);
 
     case 'unpublish':
         $pdo->prepare('UPDATE sites SET published_version_id = NULL WHERE id = ?')->execute([$siteId]);
@@ -60,7 +66,78 @@ switch ($_POST['action'] ?? '') {
         }
         $pdo->prepare('UPDATE sites SET name = ?, slug = ?, brief = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
             ->execute([$name, $slug, $brief !== '' ? $brief : $site['brief'], $siteId]);
-        json_out(['ok' => true, 'url' => site_url($slug)]);
+        json_out(['ok' => true, 'url' => public_url(['slug' => $slug] + $site)]);
+
+    case 'domain':
+        $raw = post_str('domain', 260);
+        $domain = $raw === '' ? '' : normalize_domain($raw);
+        if ($raw !== '' && $domain === '') {
+            json_out(['error' => 'That doesn\'t look like a domain name. Enter something like mybakery.com.'], 422);
+        }
+        if ($domain !== '') {
+            $taken = $pdo->prepare('SELECT 1 FROM sites WHERE custom_domain IN (?, ?) AND id != ?');
+            $taken->execute([$domain, preg_replace('/^www\./', '', $domain), $siteId]);
+            if ($taken->fetchColumn()) {
+                json_out(['error' => 'That domain is already connected to another Rowan Copy site.'], 422);
+            }
+        }
+        $pdo->prepare('UPDATE sites SET custom_domain = ? WHERE id = ?')->execute([$domain !== '' ? $domain : null, $siteId]);
+        json_out(['ok' => true, 'domain' => $domain, 'url' => public_url(['custom_domain' => $domain] + $site)]);
+
+    case 'get_html':
+        $v = $pdo->prepare('SELECT html FROM versions WHERE id = ?');
+        $v->execute([(int) $site['current_version_id']]);
+        json_out(['ok' => true, 'html' => (string) $v->fetchColumn()]);
+
+    case 'save_html':
+        $html = (string) ($_POST['html'] ?? '');
+        if (strlen($html) > 1_000_000) {
+            json_out(['error' => 'That page is too large (1 MB maximum).'], 422);
+        }
+        if (stripos($html, '<body') === false) {
+            json_out(['error' => 'The code needs at least a <body> tag.'], 422);
+        }
+        $pdo->prepare('INSERT INTO versions (site_id, html, instruction) VALUES (?, ?, ?)')->execute([$siteId, $html, 'Edited the code by hand']);
+        $vid = (int) $pdo->lastInsertId();
+        $pdo->prepare('UPDATE sites SET current_version_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')->execute([$vid, $siteId]);
+        json_out(['ok' => true, 'html' => render_site_html($html, $site),
+            'version' => ['id' => $vid, 'instruction' => 'Edited the code by hand', 'created_at' => gmdate('Y-m-d H:i:s')]]);
+
+    case 'duplicate':
+        $count = $pdo->prepare('SELECT COUNT(*) FROM sites WHERE user_id = ?');
+        $count->execute([$user['id']]);
+        if ((int) $count->fetchColumn() >= 10) {
+            json_out(['error' => 'You can have up to 10 websites. Delete one to make room.'], 422);
+        }
+        $pdo->beginTransaction();
+        $name = mb_substr($site['name'] . ' (copy)', 0, 80);
+        $pdo->prepare('INSERT INTO sites (user_id, name, slug, brief) VALUES (?, ?, ?, ?)')
+            ->execute([$user['id'], $name, unique_slug($name), $site['brief']]);
+        $newId = (int) $pdo->lastInsertId();
+        // Copy images first so the copied page can point at the new site's own files.
+        $html = '';
+        if ($site['current_version_id']) {
+            $v = $pdo->prepare('SELECT html FROM versions WHERE id = ?');
+            $v->execute([$site['current_version_id']]);
+            $html = (string) $v->fetchColumn();
+        }
+        $images = site_images($siteId);
+        if ($images && !is_dir(uploads_dir($newId))) {
+            mkdir(uploads_dir($newId), 0755, true);
+        }
+        foreach ($images as $img) {
+            $newFile = bin2hex(random_bytes(12)) . '.' . pathinfo($img['filename'], PATHINFO_EXTENSION);
+            if (@copy(uploads_dir($siteId) . '/' . $img['filename'], uploads_dir($newId) . '/' . $newFile)) {
+                $pdo->prepare('INSERT INTO images (site_id, filename, label) VALUES (?, ?, ?)')->execute([$newId, $newFile, $img['label']]);
+                $html = str_replace(image_url($img), image_url(['site_id' => $newId, 'filename' => $newFile]), $html);
+            }
+        }
+        if ($html !== '') {
+            $pdo->prepare('INSERT INTO versions (site_id, html, instruction) VALUES (?, ?, ?)')->execute([$newId, $html, 'Copied from ' . $site['name']]);
+            $pdo->prepare('UPDATE sites SET current_version_id = ? WHERE id = ?')->execute([(int) $pdo->lastInsertId(), $newId]);
+        }
+        $pdo->commit();
+        json_out(['ok' => true, 'url' => base_url('editor.php?id=' . $newId)]);
 
     case 'delete':
         array_map('unlink', glob(uploads_dir($siteId) . '/*') ?: []);

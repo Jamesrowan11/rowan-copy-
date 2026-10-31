@@ -30,9 +30,25 @@ return [
     // Set to false to close sign-ups (existing customers can still log in).
     'allow_signups' => true,
 
-    // Optional: email customers when their contact form gets a message.
-    // Use an address on your own domain (for example noreply@rowancopy.com). Leave empty to turn off.
-    'notify_email_from' => '',
+    // --- Email -----------------------------------------------------------------
+    // The address Rowan Copy sends from: password resets, email confirmations and
+    // new-message alerts. Use an address on your own domain (e.g. noreply@rowancopy.com)
+    // that exists in Plesk -> Mail. Leave empty to turn all email off.
+    'mail_from' => '',
+
+    // Require customers to confirm their email before they can publish a site.
+    // (Only applies when mail_from is set.)
+    'require_email_verification' => true,
+
+    // --- Your business --------------------------------------------------------
+    'company_name'  => 'Rowan Copy',
+    'support_email' => 'support@rowancopy.com',
+
+    // Show a small "Made with Rowan Copy" link in the corner of published sites.
+    'show_badge' => true,
+
+    // Your server's public IP address. Shown to customers connecting their own domain.
+    'server_ip' => '',
 
     // Emails listed here can open admin.php and see every customer and site.
     'admin_emails' => [
