@@ -287,6 +287,50 @@
     });
   });
 
+  // ---------- custom domain ----------
+  $('#domain-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    siteAction('domain', { domain: e.target.domain.value }).then(function (r) {
+      if (r.error) return alert(r.error);
+      e.target.domain.value = r.domain;
+      $('#domain-help').hidden = !r.domain;
+      $('#live-link').textContent = r.url;
+      $('#live-link').href = r.url;
+      alert(r.domain ? 'Domain saved. Follow the steps below to connect it.' : 'Domain removed.');
+    });
+  });
+
+  // ---------- tools ----------
+  $('#duplicate-site').addEventListener('click', function () {
+    if (!confirm('Make a copy of this website? The copy starts as an unpublished draft.')) return;
+    siteAction('duplicate').then(function (r) {
+      if (r.error) return alert(r.error);
+      location.href = r.url;
+    });
+  });
+  $('#toggle-code').addEventListener('click', function () {
+    var panel = $('#code-panel');
+    if (!panel.hidden) { panel.hidden = true; return; }
+    if (!RC.currentVersionId) return alert('Build your site first.');
+    siteAction('get_html').then(function (r) {
+      if (r.error) return alert(r.error);
+      $('#code').value = r.html;
+      panel.hidden = false;
+    });
+  });
+  $('#save-code').addEventListener('click', function () {
+    siteAction('save_html', { html: $('#code').value }).then(function (r) {
+      if (r.error) return alert(r.error);
+      RC.html = r.html;
+      RC.currentVersionId = r.version.id;
+      RC.versions.unshift(r.version);
+      setPreview(r.html);
+      renderHistory();
+      renderStatus();
+      alert('Code saved as a new version.');
+    });
+  });
+
   // ---------- start ----------
   setPreview(RC.html);
   renderStatus();

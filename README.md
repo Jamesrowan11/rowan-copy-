@@ -8,18 +8,34 @@ Built with plain PHP and SQLite, so it runs on ordinary cPanel / GoDaddy shared 
 
 | Feature | Where |
 |---|---|
-| Sign up, log in, change password, delete account | `register.php`, `login.php`, `account.php` |
+| Sign up, log in, change password or email, delete account | `register.php`, `login.php`, `account.php` |
+| Forgot-password emails with one-hour, single-use reset links | `forgot.php`, `reset.php` |
+| Email confirmation (required before publishing, when email is set up) | `verify.php` |
 | Create up to 10 websites by describing them | `dashboard.php` |
 | Chat-style AI editing with a live preview (desktop and phone views) | `editor.php` |
 | Publish / take offline; drafts don't affect the live site until published | Editor → Publish |
 | Full version history with one-click restore | Editor → History |
 | Upload logo and photos for the AI to use | Editor → Images |
 | Change the site name and web address | Editor → Settings |
-| Contact-form inbox, with optional email alerts | `inbox.php` |
+| Connect their own domain (e.g. `mybakery.com`) | Editor → Settings |
+| Download the site as an HTML file, duplicate a site, edit the code by hand | Editor → Settings → Tools |
+| Visitor counts (today / 7 days / 30 days), no cookies | Editor → Visitors |
+| Contact-form inbox with email alerts, mark unread, spreadsheet (CSV) download | `inbox.php` |
+| Email accounts on their hosted domain: create, change password, delete, webmail and phone settings | `domain.php` |
+| DNS records on their hosted domain (A, AAAA, CNAME, MX, TXT) | `domain.php` |
+| Subscribe to a plan, update card, see invoices, switch or cancel (Stripe) | `billing.php` |
 
 Published sites live at `https://your-domain/s/<site-name>`.
 
-As the owner, you get `admin.php`, which shows all customers, sites and this month's AI token usage.
+As the owner, you get `admin.php`. It shows all customers, sites, visits and this month's AI token usage, and lets you:
+- suspend or restore a customer (their sites go offline while suspended)
+- take down or restore a single site
+- raise or lower one customer's monthly AI limit
+- mark an email as confirmed
+- create a password reset link to send to a customer by hand
+- see which custom domains you still need to connect
+
+Starter **Terms of Service** and **Privacy Policy** pages are at `terms.php` and `privacy.php`. They are templates: fill in the bracketed parts and have a lawyer review them before launch.
 
 ## Setup on Plesk (Ubuntu)
 
@@ -47,8 +63,10 @@ Replace `rowancopy.com` below with your domain.
    cp config.sample.php config.php
    nano config.php
    ```
-   Set `base_url` (`https://rowancopy.com`), `anthropic_api_key`, `admin_emails`, and
+   Set `base_url` (`https://rowancopy.com`), `anthropic_api_key`, `admin_emails`, `support_email`, `server_ip` (your server's public IP), and
    `'data_dir' => '/var/www/vhosts/rowancopy.com/private/rowancopy'` (Plesk's `private` folder is outside the public web root).
+
+   **Email:** in Plesk → **Mail**, create a mailbox such as `noreply@rowancopy.com`, then set `'mail_from' => 'noreply@rowancopy.com'`. Password resets, email confirmations and new-message alerts all use it. Until it's set, email is off and customers can publish without confirming their email. To keep emails out of spam, turn on DKIM for the domain (Mail → Mail Settings) and make sure the domain's DNS has SPF and DMARC records. Plesk adds these automatically when it manages your DNS.
 7. **File ownership.** If you used SSH as root, give the files to the domain's system user so PHP can write uploads and the database. The user is shown under **Hosting Settings → System user**:
    ```bash
    chown -R THE_SYSTEM_USER:psacln /var/www/vhosts/rowancopy.com/httpdocs
@@ -67,9 +85,46 @@ Replace `rowancopy.com` below with your domain.
    Leave **Proxy mode** on so `.htaccess` (pretty `/s/site-name` links, upload protection) keeps working.
 9. Open `https://rowancopy.com`, create your account (use the email you put in `admin_emails`), and build a test site.
 
+**Connecting a customer's own domain.** When a customer adds a domain in their site settings, it shows up on `admin.php` under "Custom domains to connect". Once the customer has pointed the domain's DNS at your server:
+1. In Plesk, open the Rowan Copy domain → **Domain Aliases** → **Add Domain Alias**, enter the customer's domain (e.g. `joesplumbing.com`, with "www" included), and untick mail service.
+2. Open **SSL/TLS Certificates** for the Rowan Copy domain and reissue the Let's Encrypt certificate with the alias included.
+Visitors to that domain then see the customer's published site.
+
 Updating later: `git pull` (or **Pull Updates** in the Git extension), then rerun the `composer install` command.
 
 Back up `/var/www/vhosts/rowancopy.com/private/rowancopy` (the database) and `httpdocs/uploads` (customer images). Plesk's Backup Manager covers both.
+
+## Connecting Plesk (customer email and DNS)
+
+The portal manages Plesk through Plesk's own management API, using a key that only works from the server itself.
+
+1. On the server (SSH as root), create the key:
+   ```bash
+   plesk bin secret_key -c -ip-address 127.0.0.1 -description "Rowan Copy portal"
+   ```
+   It prints a long key. Put it in `config.php` under `'plesk' => ['key' => '...']`. Treat it like a password: it can change anything in Plesk.
+2. Open **Admin → Hosting customers (Plesk)**. It should say "Connected to Plesk" and list every domain on the server.
+3. For each existing customer's domain, enter their email (and name) and click **Link**:
+   - If they have no portal account yet, one is created and they're emailed an invitation to set a password (the link works for 7 days). If email is off, the page shows the invite link for you to send.
+   - If they already have an account, the domain simply appears on their dashboard.
+4. The customer can now manage that domain's email accounts and DNS. They can only see domains you've linked to them. NS and SOA records can't be changed from the portal, so a customer can't take their domain offline.
+
+Unlinking a domain only removes it from the portal. Nothing changes in Plesk.
+
+## Stripe (plans and payments)
+
+1. **Products:** in the Stripe Dashboard → **Product catalog**, create a product for each paid plan (Starter, Business, Pro). Give each one **two recurring prices**: monthly ($15 / $30 / $69) and yearly ($150 / $300 / $690). Copy each price's ID (`price_...`) into `'plans'` in `config.php`: monthly into `stripe_price`, yearly into `stripe_price_yearly`. Plan names, displayed prices, limits (AI edits, sites, email accounts, DNS) and feature lists are all set there. The Billing page shows a Monthly/Yearly switch whenever at least one yearly price is filled in.
+2. **API key:** Developers → API keys → copy the **Secret key** into `'stripe' => ['secret_key' => ...]`. Start with your **test mode** key (`sk_test_...`) and test card `4242 4242 4242 4242`, then switch to the live key.
+3. **Webhook:** Developers → Webhooks → **Add endpoint** `https://rowancopy.com/stripe-webhook.php` with these events:
+   `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`.
+   Copy its **Signing secret** (`whsec_...`) into `'webhook_secret'`.
+4. **Customer portal:** Settings → Billing → **Customer portal**: turn it on, allow customers to update payment methods, view invoices and cancel, and allow switching plans with all three products and both of their prices added, so customers can upgrade, downgrade, or move between monthly and yearly.
+
+How it works:
+- Customers pick a plan on **Billing** and pay on Stripe's secure checkout page. Their plan switches on as soon as they return.
+- Renewals, plan changes, failed payments and cancellations come in through the webhook. A failed payment emails the customer and shows a warning in their dashboard. When a subscription ends, they move back to Free; their sites stay online, but they can't add sites beyond the Free limit.
+- On **Admin → Customers**, you can set any customer's plan by hand (for customers you bill some other way). Stripe never charges for a plan you set there.
+- Every existing account starts on the **Free** plan, so set your current customers' plans on the Admin page after updating.
 
 ## Setup on cPanel
 
@@ -97,8 +152,8 @@ The database is created automatically on first visit in `data_dir`. By default t
 
 Every design or edit is one Claude API call. To protect your API bill:
 
-- `monthly_ai_limit` in `config.php` caps how many designs and edits each customer can run per month (default 40).
-- Each customer can make at most 3 AI requests per minute and have at most 10 sites.
+- Each plan in `config.php` sets how many designs and edits a customer can run per month (`ai_limit`) and how many sites they can have (`max_sites`). You can override the AI limit for one customer on the Admin page.
+- Each customer can make at most 3 AI requests per minute.
 - `effort` (`low` / `medium` / `high`) trades design quality for speed and cost. `medium` is a good default.
 - `admin.php` shows total tokens used this month. Your exact charges are on the Claude Console billing page. Set a monthly spend limit there too.
 
@@ -111,8 +166,6 @@ Every design or edit is one Claude API call. To protect your API bill:
 
 ## Not built yet (good next steps)
 
-- Password reset by email
-- Paid plans and billing (for example Stripe), tied to `monthly_ai_limit`
-- Custom domains for customer sites (e.g. `mybakery.com`)
 - Multi-page sites (each site is currently one page with sections)
-- Terms of service and an abuse-reporting process for customer content
+- Automatic SSL for customer domains (today you add each one as a Plesk domain alias)
+- Two-factor login

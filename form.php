@@ -16,7 +16,7 @@ function thanks_page(string $title, string $message, string $backUrl): never
 }
 
 $slug = strtolower((string) ($_GET['s'] ?? ''));
-$stmt = db()->prepare('SELECT s.*, u.email AS owner_email FROM sites s JOIN users u ON u.id = s.user_id WHERE s.slug = ? AND s.published_version_id IS NOT NULL');
+$stmt = db()->prepare('SELECT s.*, u.email AS owner_email FROM sites s JOIN users u ON u.id = s.user_id WHERE s.slug = ? AND s.published_version_id IS NOT NULL AND s.taken_down = 0 AND u.suspended = 0');
 $stmt->execute([$slug]);
 $site = $stmt->fetch();
 
@@ -24,7 +24,7 @@ if (!$site || $_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(404);
     exit('Not found.');
 }
-$back = site_url($site['slug']);
+$back = public_url($site);
 
 // Spam trap: real people never fill in the hidden _hp field.
 if (!empty($_POST['_hp'])) {
@@ -54,16 +54,12 @@ if (!$fields) {
 db()->prepare('INSERT INTO submissions (site_id, data, ip) VALUES (?, ?, ?)')
     ->execute([$site['id'], json_encode($fields, JSON_UNESCAPED_UNICODE), client_ip()]);
 
-// Optional email alert to the site owner.
-$from = (string) cfg('notify_email_from', '');
-if ($from !== '') {
-    $subject = 'New message from your website: ' . preg_replace('/[\r\n]+/', ' ', $site['name']);
-    $body = "You received a new message through {$back}\n\n";
-    foreach ($fields as $k => $v) {
-        $body .= ucfirst($k) . ": {$v}\n";
-    }
-    $body .= "\nRead and manage messages: " . base_url('inbox.php?id=' . $site['id']) . "\n";
-    @mail($site['owner_email'], $subject, $body, 'From: Rowan Copy <' . preg_replace('/[\r\n]+/', '', $from) . '>');
+// Email alert to the site owner (when email is set up on the server).
+$body = "You received a new message through " . public_url($site) . "\n\n";
+foreach ($fields as $k => $v) {
+    $body .= ucfirst($k) . ": {$v}\n";
 }
+$body .= "\nRead and manage messages: " . base_url('inbox.php?id=' . $site['id']) . "\n";
+send_email($site['owner_email'], 'New message from your website: ' . $site['name'], $body);
 
 thanks_page('Thank you!', 'Your message was sent. We\'ll be in touch soon.', $back);

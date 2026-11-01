@@ -2,6 +2,16 @@
 require __DIR__ . '/lib/bootstrap.php';
 require __DIR__ . '/lib/layout.php';
 
+// A customer's own domain (e.g. mybakery.com) pointed at this server shows their site.
+$host = strtolower(preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? '')) ?? '');
+if ($host !== '' && $host !== strtolower((string) parse_url((string) cfg('base_url'), PHP_URL_HOST))) {
+    $stmt = db()->prepare(SITE_SERVE_SQL . ' WHERE s.custom_domain IN (?, ?)');
+    $stmt->execute([$host, preg_replace('/^www\./', '', $host)]);
+    if ($site = $stmt->fetch()) {
+        serve_site($site);
+    }
+}
+
 if (current_user()) {
     redirect('dashboard.php');
 }
