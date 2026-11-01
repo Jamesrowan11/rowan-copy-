@@ -10,9 +10,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         if (($_POST['action'] ?? '') === 'checkout') {
             $key = (string) ($_POST['plan'] ?? '');
+            $interval = ($_POST['interval'] ?? '') === 'year' ? 'year' : 'month';
             $plan = plans()[$key] ?? null;
-            if (!$plan || empty($plan['stripe_price'])) {
-                throw new RuntimeException('That plan isn\'t available.');
+            $priceId = $plan ? plan_price_id($plan, $interval) : '';
+            if ($priceId === '') {
+                throw new RuntimeException('That plan isn\'t available' . ($interval === 'year' ? ' yearly' : '') . '.');
             }
             if ($user['plan_source'] === 'stripe' && in_array($user['subscription_status'], ['active', 'trialing', 'past_due'], true)) {
                 throw new RuntimeException('You already have a subscription. Use "Manage billing" to switch plans.');
@@ -21,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'mode' => 'subscription',
                 'customer' => stripe_customer_id($user),
                 'client_reference_id' => (string) $user['id'],
-                'line_items' => [['price' => $plan['stripe_price'], 'quantity' => 1]],
+                'line_items' => [['price' => $priceId, 'quantity' => 1]],
                 'allow_promotion_codes' => true,
                 'success_url' => base_url('billing.php?done={CHECKOUT_SESSION_ID}'),
                 'cancel_url' => base_url('billing.php'),
@@ -61,6 +63,8 @@ if (isset($_GET['done']) && stripe_enabled() && preg_match('/^cs_[A-Za-z0-9_]+$/
 }
 
 $current = plan_key($user);
+$interval = ($_GET['interval'] ?? '') === 'year' ? 'year' : 'month';
+$hasYearly = (bool) array_filter(plans(), fn ($p) => !empty($p['stripe_price_yearly']));
 $hasSub = $user['plan_source'] === 'stripe' && in_array($user['subscription_status'], ['active', 'trialing', 'past_due'], true);
 
 page_header('Billing');
@@ -85,21 +89,28 @@ page_header('Billing');
     <?php endif; ?>
   </div>
 
+  <?php if ($hasYearly): ?>
+    <div class="interval-toggle" role="group" aria-label="Billing period">
+      <a href="<?= h(base_url('billing.php')) ?>" class="<?= $interval === 'month' ? 'active' : '' ?>">Monthly</a>
+      <a href="<?= h(base_url('billing.php?interval=year')) ?>" class="<?= $interval === 'year' ? 'active' : '' ?>">Yearly <span class="save">2 months free</span></a>
+    </div>
+  <?php endif; ?>
+
   <div class="plan-grid">
     <?php foreach (plans() as $key => $plan): ?>
       <div class="card plan<?= $key === $current ? ' plan-current' : '' ?>">
         <h3><?= h($plan['name']) ?></h3>
-        <p class="plan-price"><?= h($plan['price'] ?? '') ?></p>
+        <p class="plan-price"><?= h($interval === 'year' && !empty($plan['price_yearly']) ? $plan['price_yearly'] : ($plan['price'] ?? '')) ?></p>
         <ul>
           <?php foreach ((array) ($plan['features'] ?? []) as $f): ?><li><?= h($f) ?></li><?php endforeach; ?>
         </ul>
         <?php if ($key === $current): ?>
           <span class="badge badge-live">Current plan</span>
-        <?php elseif (!empty($plan['stripe_price']) && stripe_enabled()): ?>
+        <?php elseif (plan_price_id($plan, $interval) !== '' && stripe_enabled()): ?>
           <?php if ($hasSub): ?>
             <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="portal"><button class="btn btn-block">Switch plan</button></form>
           <?php else: ?>
-            <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="checkout"><input type="hidden" name="plan" value="<?= h($key) ?>">
+            <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="checkout"><input type="hidden" name="plan" value="<?= h($key) ?>"><input type="hidden" name="interval" value="<?= h($interval) ?>">
               <button class="btn btn-block">Choose <?= h($plan['name']) ?></button></form>
           <?php endif; ?>
         <?php endif; ?>

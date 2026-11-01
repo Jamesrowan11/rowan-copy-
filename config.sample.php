@@ -26,24 +26,46 @@ return [
 
     // --- Plans -----------------------------------------------------------------
     // What each plan includes. Customers subscribe on the Billing page through Stripe.
-    // For each paid plan, create a Product with a monthly Price in Stripe
-    // (Dashboard -> Product catalog) and paste the Price ID (price_...) below.
+    // For each paid plan, create a Product in Stripe (Dashboard -> Product catalog)
+    // with TWO recurring prices, one monthly and one yearly, and paste their Price IDs
+    // (price_...) below. Leave a yearly ID empty to offer that plan monthly only.
     // Change names, prices and limits to suit you; 'free' must always exist.
+    //   ai_limit       AI designs and edits per month
+    //   max_sites      websites
+    //   max_mailboxes  email accounts across all of their domains you host
+    //   dns            can edit DNS records in the portal
     'plans' => [
         'free' => [
-            'name' => 'Free', 'price' => '$0', 'stripe_price' => '',
-            'ai_limit' => 10, 'max_sites' => 1, 'custom_domain' => false, 'remove_badge' => false,
-            'features' => ['1 website', '10 AI designs or edits a month', 'Free rowancopy.com web address'],
+            'name' => 'Free', 'price' => '$0', 'price_yearly' => '$0',
+            'stripe_price' => '', 'stripe_price_yearly' => '',
+            'ai_limit' => 5, 'max_sites' => 1, 'max_mailboxes' => 0, 'dns' => false,
+            'custom_domain' => false, 'remove_badge' => false,
+            'features' => ['1 website', '5 AI designs or edits a month', 'Free rowancopy.com web address',
+                'Contact-form inbox and visitor stats', 'Email support'],
         ],
         'starter' => [
-            'name' => 'Starter', 'price' => '$15/month', 'stripe_price' => '',
-            'ai_limit' => 60, 'max_sites' => 3, 'custom_domain' => true, 'remove_badge' => true,
-            'features' => ['3 websites', '60 AI designs or edits a month', 'Use your own domain', 'No Rowan Copy badge'],
+            'name' => 'Starter', 'price' => '$15/month', 'price_yearly' => '$150/year',
+            'stripe_price' => '', 'stripe_price_yearly' => '',
+            'ai_limit' => 30, 'max_sites' => 1, 'max_mailboxes' => 1, 'dns' => false,
+            'custom_domain' => true, 'remove_badge' => true,
+            'features' => ['1 website', '30 AI designs or edits a month', 'Use your own domain', 'No Rowan Copy badge',
+                '1 email account on your domain', 'Email support'],
         ],
         'business' => [
-            'name' => 'Business', 'price' => '$30/month', 'stripe_price' => '',
-            'ai_limit' => 200, 'max_sites' => 10, 'custom_domain' => true, 'remove_badge' => true,
-            'features' => ['10 websites', '200 AI designs or edits a month', 'Your own domain', 'Email accounts and DNS managed in your portal', 'Priority support'],
+            'name' => 'Business', 'price' => '$30/month', 'price_yearly' => '$300/year',
+            'stripe_price' => '', 'stripe_price_yearly' => '',
+            'ai_limit' => 75, 'max_sites' => 3, 'max_mailboxes' => 5, 'dns' => true,
+            'custom_domain' => true, 'remove_badge' => true,
+            'features' => ['3 websites', '75 AI designs or edits a month', 'Use your own domain', 'No Rowan Copy badge',
+                '5 email accounts on your domain', 'DNS management in your portal', 'Priority support'],
+        ],
+        'pro' => [
+            'name' => 'Pro', 'price' => '$69/month', 'price_yearly' => '$690/year',
+            'stripe_price' => '', 'stripe_price_yearly' => '',
+            'ai_limit' => 200, 'max_sites' => 10, 'max_mailboxes' => 20, 'dns' => true,
+            'custom_domain' => true, 'remove_badge' => true,
+            'features' => ['10 websites', '200 AI designs or edits a month', 'Use your own domain', 'No Rowan Copy badge',
+                '20 email accounts on your domain', 'DNS management in your portal', 'Priority support and a monthly check-in'],
         ],
     ],
 

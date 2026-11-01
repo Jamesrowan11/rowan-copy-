@@ -19,6 +19,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         switch ($_POST['action'] ?? '') {
             case 'mail_create':
+                if (count_user_mailboxes((int) $user['id']) >= max_mailboxes($user)) {
+                    throw new PleskError(max_mailboxes($user) === 0
+                        ? 'Email accounts are included in our paid plans. See the Billing page to upgrade.'
+                        : 'Your ' . user_plan($user)['name'] . ' plan includes ' . max_mailboxes($user) . ' email account' . (max_mailboxes($user) === 1 ? '' : 's') . '. Upgrade on the Billing page for more.');
+                }
                 $pw = (string) ($_POST['password'] ?? '');
                 if (strlen($pw) < 10) {
                     throw new PleskError('Use a password of at least 10 characters.');
@@ -39,12 +44,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flash("Deleted {$local}@{$name} and all of its email.");
                 break;
             case 'dns_add':
+            case 'dns_delete':
+                if (!plan_feature($user, 'dns')) {
+                    throw new PleskError('Editing DNS records is included in the Business and Pro plans. See the Billing page to upgrade.');
+                }
+                if ($_POST['action'] === 'dns_delete') {
+                    plesk_delete_dns($siteId, (int) ($_POST['record_id'] ?? 0));
+                    flash('DNS record deleted.');
+                    break;
+                }
                 plesk_add_dns($siteId, post_str('type', 10), post_str('host', 253), post_str('value', 1024), post_str('priority', 5));
                 flash('DNS record added. Changes can take up to an hour to spread across the internet.');
-                break;
-            case 'dns_delete':
-                plesk_delete_dns($siteId, (int) ($_POST['record_id'] ?? 0));
-                flash('DNS record deleted.');
                 break;
         }
     } catch (PleskError $e) {
@@ -55,9 +65,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $mailboxes = $records = [];
 $loadError = '';
+$mailUsed = 0;
+$canDns = plan_feature($user, 'dns');
 try {
     $mailboxes = plesk_list_mailboxes($siteId);
     $records = plesk_list_dns($siteId);
+    $mailUsed = count_user_mailboxes((int) $user['id']);
 } catch (PleskError $e) {
     error_log('Rowan Copy Plesk: ' . $e->getMessage());
     $loadError = 'We couldn\'t load this domain\'s settings right now. Please try again in a few minutes.';
@@ -97,12 +110,22 @@ page_header($name);
     </ul>
 
     <h3>Add an email account</h3>
+    <?php if (max_mailboxes($user) === 0): ?>
+      <div class="notice small">New email accounts are included in our paid plans. <a href="<?= h(base_url('billing.php')) ?>">See plans</a></div>
+    <?php else: ?>
+      <p class="muted small usage-note"><?= $mailUsed ?> of <?= max_mailboxes($user) ?> email accounts on your <?= h(user_plan($user)['name']) ?> plan<?= count(user_hosting_domains((int) $user['id'])) > 1 ? ' (across all your domains)' : '' ?>.</p>
+    <?php endif; ?>
+    <?php if (max_mailboxes($user) === 0): ?>
+    <?php elseif ($mailUsed >= max_mailboxes($user)): ?>
+      <div class="notice small">You've used all the email accounts on your plan. <a href="<?= h(base_url('billing.php')) ?>">Upgrade for more</a>, or delete one you don't need.</div>
+    <?php else: ?>
     <form method="post" class="mail-create">
       <?= csrf_field() ?><input type="hidden" name="action" value="mail_create">
       <label>Address <span class="addr"><input name="local" required maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9._\-]*" placeholder="info"><span>@<?= h($name) ?></span></span></label>
       <label>Password <input type="password" name="password" required minlength="10" autocomplete="new-password"></label>
       <button class="btn">Create email account</button>
     </form>
+    <?php endif; ?>
 
     <details class="mail-settings">
       <summary>Settings for phones and email apps (Outlook, Apple Mail…)</summary>
@@ -124,7 +147,7 @@ page_header($name);
           <td><?= h($r['type']) ?></td>
           <td><?= h($r['host']) ?></td>
           <td class="dns-value"><?= h(($r['type'] === 'MX' && $r['opt'] !== '' ? $r['opt'] . ' ' : '') . $r['value']) ?></td>
-          <td><?php if (in_array($r['type'], DNS_EDITABLE_TYPES, true)): ?>
+          <td><?php if ($canDns && in_array($r['type'], DNS_EDITABLE_TYPES, true)): ?>
             <form method="post" onsubmit="return confirm('Delete this <?= h($r['type']) ?> record?')"><?= csrf_field() ?>
               <input type="hidden" name="action" value="dns_delete"><input type="hidden" name="record_id" value="<?= (int) $r['id'] ?>">
               <button class="link small danger-link">Delete</button></form>
@@ -133,6 +156,9 @@ page_header($name);
       <?php endforeach; ?>
     </table></div>
 
+    <?php if (!$canDns): ?>
+      <div class="notice small">You can view your DNS records here. Editing them is included in the Business and Pro plans. <a href="<?= h(base_url('billing.php')) ?>">See plans</a></div>
+    <?php else: ?>
     <h3>Add a record</h3>
     <form method="post" class="dns-add">
       <?= csrf_field() ?><input type="hidden" name="action" value="dns_add">
@@ -144,6 +170,7 @@ page_header($name);
       <label>Priority (MX only) <input name="priority" type="number" min="0" max="65535" placeholder="10"></label>
       <button class="btn">Add record</button>
     </form>
+    <?php endif; ?>
   </div>
 </div>
 <?php page_footer();

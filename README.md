@@ -113,12 +113,12 @@ Unlinking a domain only removes it from the portal. Nothing changes in Plesk.
 
 ## Stripe (plans and payments)
 
-1. **Products:** in the Stripe Dashboard → **Product catalog**, create a product for each paid plan (e.g. Starter, Business) with a **recurring monthly price**. Copy each price's ID (`price_...`) into `'plans'` in `config.php`. Plan names, prices shown, limits and feature lists are all set there.
+1. **Products:** in the Stripe Dashboard → **Product catalog**, create a product for each paid plan (Starter, Business, Pro). Give each one **two recurring prices**: monthly ($15 / $30 / $69) and yearly ($150 / $300 / $690). Copy each price's ID (`price_...`) into `'plans'` in `config.php`: monthly into `stripe_price`, yearly into `stripe_price_yearly`. Plan names, displayed prices, limits (AI edits, sites, email accounts, DNS) and feature lists are all set there. The Billing page shows a Monthly/Yearly switch whenever at least one yearly price is filled in.
 2. **API key:** Developers → API keys → copy the **Secret key** into `'stripe' => ['secret_key' => ...]`. Start with your **test mode** key (`sk_test_...`) and test card `4242 4242 4242 4242`, then switch to the live key.
 3. **Webhook:** Developers → Webhooks → **Add endpoint** `https://rowancopy.com/stripe-webhook.php` with these events:
    `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`.
    Copy its **Signing secret** (`whsec_...`) into `'webhook_secret'`.
-4. **Customer portal:** Settings → Billing → **Customer portal**: turn it on, allow customers to update payment methods, view invoices and cancel, and (optional) allow switching between your plan products.
+4. **Customer portal:** Settings → Billing → **Customer portal**: turn it on, allow customers to update payment methods, view invoices and cancel, and allow switching plans with all three products and both of their prices added, so customers can upgrade, downgrade, or move between monthly and yearly.
 
 How it works:
 - Customers pick a plan on **Billing** and pay on Stripe's secure checkout page. Their plan switches on as soon as they return.

@@ -11,8 +11,9 @@ declare(strict_types=1);
 const DEFAULT_PLANS = [
     'free' => [
         'name' => 'Free', 'price' => '$0', 'stripe_price' => '',
-        'ai_limit' => 10, 'max_sites' => 1, 'custom_domain' => false, 'remove_badge' => false,
-        'features' => ['1 website', '10 AI designs or edits a month', 'Rowan Copy web address'],
+        'ai_limit' => 5, 'max_sites' => 1, 'max_mailboxes' => 0, 'dns' => false,
+        'custom_domain' => false, 'remove_badge' => false,
+        'features' => ['1 website', '5 AI designs or edits a month', 'Rowan Copy web address'],
     ],
 ];
 
@@ -79,14 +80,36 @@ function stripe_customer_id(array $user): string
     return $customer->id;
 }
 
+/** Which plan a Stripe price belongs to (monthly or yearly). */
 function plan_for_price(string $priceId): ?string
 {
     foreach (plans() as $key => $plan) {
-        if ($priceId !== '' && ($plan['stripe_price'] ?? '') === $priceId) {
+        if ($priceId !== '' && in_array($priceId, [$plan['stripe_price'] ?? '', $plan['stripe_price_yearly'] ?? ''], true)) {
             return $key;
         }
     }
     return null;
+}
+
+/** The Stripe price for a plan and billing interval ('month' or 'year'), or '' if not offered. */
+function plan_price_id(array $plan, string $interval): string
+{
+    return (string) ($interval === 'year' ? ($plan['stripe_price_yearly'] ?? '') : ($plan['stripe_price'] ?? ''));
+}
+
+function max_mailboxes(array $user): int
+{
+    return (int) (user_plan($user)['max_mailboxes'] ?? 0);
+}
+
+/** Email accounts this customer has across every domain linked to them. */
+function count_user_mailboxes(int $userId): int
+{
+    $n = 0;
+    foreach (user_hosting_domains($userId) as $d) {
+        $n += count(plesk_list_mailboxes((int) $d['plesk_site_id']));
+    }
+    return $n;
 }
 
 /**

@@ -196,3 +196,8 @@ select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; f
   .dns-table td:first-child { font-weight: 700; }
   .dns-table td:last-child { grid-row: 1; grid-column: 3; }
 }
+.interval-toggle { display: inline-flex; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px; margin: 4px 0 14px; }
+.interval-toggle a { padding: 7px 16px; border-radius: 999px; text-decoration: none; color: var(--muted); font-weight: 600; font-size: .9rem; }
+.interval-toggle a.active { background: var(--brand); color: #fff; }
+.interval-toggle .save { font-size: .75rem; font-weight: 500; opacity: .85; }
+.usage-note { margin: 0 0 12px; }
