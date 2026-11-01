@@ -18,6 +18,7 @@ $GLOBALS['RC_CONFIG'] = require $configFile;
 
 require_once __DIR__ . '/billing.php';
 require_once __DIR__ . '/plesk.php';
+require_once __DIR__ . '/referrals.php';
 require_once RC_ROOT . '/vendor/autoload.php';
 
 function cfg(string $key, mixed $default = null): mixed
@@ -150,6 +151,17 @@ function migrate(PDO $pdo): void
     add_column($pdo, 'users', 'plan_renews_at', 'TEXT');
     add_column($pdo, 'users', 'plan_cancels', 'INTEGER NOT NULL DEFAULT 0');
     add_column($pdo, 'users', 'role', "TEXT NOT NULL DEFAULT 'customer'"); // customer | employee | admin
+    add_column($pdo, 'users', 'referral_code', 'TEXT');
+    $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code)');
+    $pdo->exec("CREATE TABLE IF NOT EXISTS referrals (
+        id INTEGER PRIMARY KEY,
+        referrer_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        referred_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'signed_up', -- signed_up | rewarded | capped
+        reward_cents INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        rewarded_at TEXT
+    )");
     $pdo->exec('CREATE TABLE IF NOT EXISTS inquiries (
         id INTEGER PRIMARY KEY,
         name TEXT NOT NULL,

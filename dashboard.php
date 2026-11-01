@@ -44,6 +44,10 @@ page_header('My sites');
     </div>
   </div>
 
+  <?php if (referrals_enabled()): ?>
+    <a class="notice referral-banner" href="<?= h(base_url('referrals.php')) ?>">🎁 <span><strong>Give a friend a free month, get one free.</strong> Share your referral link →</span></a>
+  <?php endif; ?>
+
   <?php if ($user['subscription_status'] === 'past_due'): ?>
     <div class="notice">⚠️ Your last payment didn't go through. <a href="<?= h(base_url('billing.php')) ?>">Update your card</a> to keep your plan.</div>
   <?php endif; ?>

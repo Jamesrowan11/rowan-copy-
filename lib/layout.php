@@ -45,6 +45,7 @@ function page_header(string $title, string $bodyClass = '', string $description 
     <?php if ($user): ?>
       <a href="<?= h(base_url('dashboard.php')) ?>">My account</a>
       <a href="<?= h(base_url('billing.php')) ?>">Billing</a>
+      <?php if (referrals_enabled()): ?><a href="<?= h(base_url('referrals.php')) ?>">Refer a friend</a><?php endif; ?>
       <a href="<?= h(base_url('account.php')) ?>">Settings</a>
       <?php if (is_staff($user)): ?>
         <a href="<?= h(base_url('admin-hosting.php')) ?>">Hosting</a>

@@ -358,3 +358,11 @@ a.m-card:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(20,35
   .m-sample-note { left: 8px; }
   .site-foot { padding-left: 16px; padding-right: 16px; }
 }
+
+/* referrals */
+.lead-left { font-size: 1.1rem; color: var(--muted); max-width: 640px; margin: 0 0 24px; }
+.copy-row { display: flex; gap: 8px; }
+.copy-row input { margin: 0; flex: 1; min-width: 0; }
+.share-row { margin-top: 14px; }
+.referral-banner { text-decoration: none; color: var(--ink); justify-content: flex-start; }
+.referral-banner:hover { border-color: var(--accent); }
