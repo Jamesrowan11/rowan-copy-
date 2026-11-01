@@ -4,6 +4,29 @@ An AI website builder for small businesses. Customers create an account, describ
 
 Built with plain PHP and SQLite, so it runs on ordinary cPanel / GoDaddy shared hosting. No separate database server is needed.
 
+## The public website
+
+`index.php` (Home), `services.php`, `work.php`, `about.php`, `pricing.php` and `contact.php` are the Rowan Copy studio website, brought over from the old Node.js site: copywriting services, website plans, and a **Get a quote** form. Quote requests are saved and emailed to `contact_email`, the person gets a confirmation email, and staff work through them on **Admin → Quote requests**.
+
+- Company details (name, tagline, owner, location, contact email) are in `config.php`.
+- The copywriting services menu and prices are in `lib/marketing.php`.
+- The Work page case studies are placeholders marked with [brackets] in `work.php`. Replace them with real samples.
+
+## Team: admins and employees
+
+Add staff on **Admin → Team**. Each person gets an email invitation to set their password, and you can create their `@rowancopy.com` email account in Plesk at the same time.
+
+| | Admin | Employee |
+|---|---|---|
+| See customers, sites and quote requests | ✓ | ✓ |
+| Send customers password reset links, confirm emails | ✓ | ✓ (customers only, never staff) |
+| Manage email accounts and DNS for any domain on the server (Hosting) | ✓ | ✓ |
+| Set plans and AI limits, suspend customers, take down sites | ✓ | |
+| Link Plesk domains to customers | ✓ | |
+| Add, change or remove team members | ✓ | |
+
+Emails in `admin_emails` in `config.php` are owner accounts: always admins, and they can't be removed from the Team page, so you can never lock yourself out. Removing someone from the team logs them out immediately; they keep a normal customer account.
+
 ## What customers can do
 
 | Feature | Where |

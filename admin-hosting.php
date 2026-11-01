@@ -4,15 +4,16 @@
 require __DIR__ . '/lib/bootstrap.php';
 require __DIR__ . '/lib/layout.php';
 
-$user = require_login();
-if (!is_admin($user)) {
-    http_response_code(403);
-    exit('Admins only.');
-}
+$user = require_staff();
+$isAdmin = is_admin($user);
 
 $inviteLink = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf();
+    if (!$isAdmin) {
+        http_response_code(403);
+        exit('Only admins can link or unlink customers.');
+    }
     $pdo = db();
     try {
         switch ($_POST['action'] ?? '') {
@@ -83,12 +84,12 @@ if (plesk_enabled()) {
 $links = db()->query('SELECT h.*, u.email, u.name FROM hosting_domains h JOIN users u ON u.id = h.user_id')->fetchAll();
 $byDomain = array_column($links, null, 'domain');
 
-page_header('Hosting customers');
+page_header('Hosting');
 ?>
 <div class="page">
   <a class="back" href="<?= h(base_url('admin.php')) ?>">← Admin</a>
-  <h1>Hosting customers</h1>
-  <p class="muted">Link each domain in Plesk to the customer who owns it. They can then manage its email accounts and DNS from their portal. New customers get an email invitation to set their password.</p>
+  <h1>Hosting</h1>
+  <p class="muted">Every domain on this server. Click <strong>Email &amp; DNS</strong> to manage a domain's email accounts and DNS records yourself<?= $isAdmin ? ', or link it to the customer who owns it so they can manage it from their own portal. New customers get an email invitation to set their password' : '' ?>.</p>
 
   <?php if ($inviteLink): ?>
     <div class="card"><h2>Invite link</h2><p class="muted small">Send this to the customer. It works for 7 days.</p><div class="reset-link"><?= h($inviteLink) ?></div></div>
@@ -103,11 +104,13 @@ page_header('Hosting customers');
   <?php endif; ?>
 
   <div class="table-wrap"><table>
-    <tr><th>Domain</th><th>Customer</th><th>Action</th></tr>
+    <tr><th>Domain</th><th>Customer</th><th>Manage</th><?php if ($isAdmin): ?><th>Link to a customer</th><?php endif; ?></tr>
     <?php foreach ($pleskDomains as $d): $l = $byDomain[$d['name']] ?? null; ?>
       <tr>
         <td><?= h($d['name']) ?></td>
         <td><?= $l ? h($l['name']) . '<br><span class="muted small">' . h($l['email']) . '</span>' : '<span class="muted">Not linked</span>' ?></td>
+        <td><a class="btn btn-sm" href="<?= h(base_url('domain.php?plesk=' . $d['id'])) ?>">Email &amp; DNS</a></td>
+        <?php if ($isAdmin): ?>
         <td>
           <?php if ($l): ?>
             <form method="post" onsubmit="return confirm('Unlink <?= h($d['name']) ?> from this customer?')"><?= csrf_field() ?>
@@ -118,9 +121,10 @@ page_header('Hosting customers');
               <input type="hidden" name="action" value="link"><input type="hidden" name="domain" value="<?= h($d['name']) ?>">
               <input type="email" name="email" required placeholder="customer@email.com">
               <input name="name" placeholder="Customer name (new accounts)">
-              <button class="btn btn-sm">Link</button></form>
+              <button class="btn btn-ghost btn-sm">Link</button></form>
           <?php endif; ?>
         </td>
+        <?php endif; ?>
       </tr>
     <?php endforeach; ?>
   </table></div>
