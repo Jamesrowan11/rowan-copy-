@@ -161,6 +161,7 @@ Unlinking a domain only removes it from the portal. Nothing changes in Plesk.
 
 How it works:
 - Customers pick a plan on **Billing** and pay on Stripe's secure checkout page. Their plan switches on as soon as they return.
+- Customers switch plans (up, down, monthly ↔ yearly) and cancel right on the **Billing** page. The price difference is charged or credited immediately, and a switch only happens if that payment succeeds. Cancelling keeps the plan until the end of the paid period.
 - Renewals, plan changes, failed payments and cancellations come in through the webhook. A failed payment emails the customer and shows a warning in their dashboard. When a subscription ends, they move back to Free; their sites stay online, but they can't add sites beyond the Free limit.
 - On **Admin → Customers**, you can set any customer's plan by hand (for customers you bill some other way). Stripe never charges for a plan you set there.
 - Every existing account starts on the **Free** plan, so set your current customers' plans on the Admin page after updating.

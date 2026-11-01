@@ -5,6 +5,23 @@ require __DIR__ . '/lib/layout.php';
 $user = require_login();
 $error = '';
 
+/** The customer's live Stripe subscription, or null. */
+function live_subscription(array $user): ?\Stripe\Subscription
+{
+    if ($user['plan_source'] !== 'stripe' || !in_array($user['subscription_status'], ['active', 'trialing', 'past_due'], true)) {
+        return null;
+    }
+    $stmt = db()->prepare('SELECT stripe_subscription_id FROM users WHERE id = ?');
+    $stmt->execute([$user['id']]);
+    $id = (string) $stmt->fetchColumn();
+    if ($id === '') {
+        return null;
+    }
+    $sub = stripe()->subscriptions->retrieve($id);
+    $owner = is_string($sub->customer) ? $sub->customer : $sub->customer->id;
+    return $owner === $user['stripe_customer_id'] ? $sub : null;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf();
     try {
@@ -31,6 +48,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             header('Location: ' . $session->url, true, 303);
             exit;
+        }
+        // Change plan or billing period on an existing subscription, right here.
+        if (($_POST['action'] ?? '') === 'switch') {
+            $key = (string) ($_POST['plan'] ?? '');
+            $interval = ($_POST['interval'] ?? '') === 'year' ? 'year' : 'month';
+            $plan = plans()[$key] ?? null;
+            $priceId = $plan ? plan_price_id($plan, $interval) : '';
+            $sub = live_subscription($user);
+            if ($priceId === '' || !$sub) {
+                throw new RuntimeException('That plan isn\'t available.');
+            }
+            $item = $sub->items->data[0];
+            if ($item->price->id !== $priceId) {
+                $updated = stripe()->subscriptions->update($sub->id, [
+                    'items' => [['id' => $item->id, 'price' => $priceId]],
+                    // Charge (or credit) the difference now, and only switch if that payment succeeds.
+                    'proration_behavior' => 'always_invoice',
+                    'payment_behavior' => 'pending_if_incomplete',
+                    'cancel_at_period_end' => false,
+                ]);
+                if (!empty($updated->pending_update)) {
+                    flash('Your card couldn\'t be charged for the new plan, so nothing changed yet. Update your card under "Manage billing" and try again.', 'err');
+                } else {
+                    sync_subscription($updated);
+                    flash('You\'re now on ' . $plan['name'] . ($interval === 'year' ? ' (yearly)' : ' (monthly)') . '. Any difference in price has been charged or credited to your account.');
+                }
+            }
+            redirect('billing.php' . ($interval === 'year' ? '?interval=year' : ''));
+        }
+        // Cancel at the end of the paid period (back to Free), or undo that.
+        if (in_array($_POST['action'] ?? '', ['cancel', 'resume'], true)) {
+            $sub = live_subscription($user);
+            if (!$sub) {
+                throw new RuntimeException('You don\'t have an active subscription.');
+            }
+            $cancel = $_POST['action'] === 'cancel';
+            sync_subscription(stripe()->subscriptions->update($sub->id, ['cancel_at_period_end' => $cancel]));
+            flash($cancel ? 'Your plan will end at the close of this billing period, then you\'ll move to Free. Your websites stay online.' : 'Great, your plan will keep renewing.');
+            redirect('billing.php');
         }
         if (($_POST['action'] ?? '') === 'portal') {
             $portal = stripe()->billingPortal->sessions->create([
@@ -66,6 +122,22 @@ $current = plan_key($user);
 $interval = ($_GET['interval'] ?? '') === 'year' ? 'year' : 'month';
 $hasYearly = (bool) array_filter(plans(), fn ($p) => !empty($p['stripe_price_yearly']));
 $hasSub = $user['plan_source'] === 'stripe' && in_array($user['subscription_status'], ['active', 'trialing', 'past_due'], true);
+// Which price they're on now, so the page knows if they're monthly or yearly.
+$currentInterval = 'month';
+if ($hasSub && stripe_enabled()) {
+    try {
+        $liveSub = live_subscription($user);
+        $priceNow = $liveSub ? (string) $liveSub->items->data[0]->price->id : '';
+        if ($priceNow !== '' && $priceNow === (plans()[$current]['stripe_price_yearly'] ?? null)) {
+            $currentInterval = 'year';
+        }
+    } catch (\Stripe\Exception\ApiErrorException $e) {
+        error_log('Rowan Copy Stripe error: ' . $e->getMessage());
+    }
+}
+if (!isset($_GET['interval']) && $hasSub) {
+    $interval = $currentInterval;
+}
 
 page_header('Billing');
 ?>
@@ -85,7 +157,7 @@ page_header('Billing');
     <?php endif; ?>
     <?php if ($user['stripe_customer_id'] && stripe_enabled()): ?>
       <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="portal">
-        <button class="btn btn-ghost">Manage billing: card, invoices, change or cancel plan</button></form>
+        <button class="btn btn-ghost">Manage billing: card and invoices</button></form>
     <?php endif; ?>
   </div>
 
@@ -104,11 +176,24 @@ page_header('Billing');
         <ul>
           <?php foreach ((array) ($plan['features'] ?? []) as $f): ?><li><?= h($f) ?></li><?php endforeach; ?>
         </ul>
-        <?php if ($key === $current): ?>
+        <?php if ($key === $current && (!$hasSub || $interval === $currentInterval)): ?>
           <span class="badge badge-live">Current plan</span>
+          <?php if ($hasSub && $user['plan_cancels']): ?>
+            <form method="post" class="plan-action"><?= csrf_field() ?><input type="hidden" name="action" value="resume"><button class="btn btn-ghost btn-block">Keep my plan</button></form>
+          <?php endif; ?>
+        <?php elseif ($key === 'free' && $hasSub): ?>
+          <?php if (!$user['plan_cancels']): ?>
+            <form method="post" class="plan-action" onsubmit="return confirm('Cancel your plan? It stays active until the end of this billing period, then you move to Free. Your websites stay online.')">
+              <?= csrf_field() ?><input type="hidden" name="action" value="cancel"><button class="btn btn-ghost btn-block">Cancel plan</button></form>
+          <?php else: ?>
+            <span class="muted small">You'll move to Free when your current period ends.</span>
+          <?php endif; ?>
         <?php elseif (plan_price_id($plan, $interval) !== '' && stripe_enabled()): ?>
           <?php if ($hasSub): ?>
-            <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="portal"><button class="btn btn-block">Switch plan</button></form>
+            <?php $label = $key === $current ? 'Switch to ' . ($interval === 'year' ? 'yearly' : 'monthly') : 'Switch to ' . $plan['name']; ?>
+            <form method="post" class="plan-action" onsubmit="return confirm(<?= h(json_encode($label . '? The price difference for the rest of this period is charged or credited right away.')) ?>)">
+              <?= csrf_field() ?><input type="hidden" name="action" value="switch"><input type="hidden" name="plan" value="<?= h($key) ?>"><input type="hidden" name="interval" value="<?= h($interval) ?>">
+              <button class="btn btn-block"><?= h($label) ?></button></form>
           <?php else: ?>
             <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="checkout"><input type="hidden" name="plan" value="<?= h($key) ?>"><input type="hidden" name="interval" value="<?= h($interval) ?>">
               <button class="btn btn-block">Choose <?= h($plan['name']) ?></button></form>
