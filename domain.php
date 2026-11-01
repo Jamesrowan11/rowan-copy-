@@ -4,10 +4,30 @@ require __DIR__ . '/lib/bootstrap.php';
 require __DIR__ . '/lib/layout.php';
 
 $user = require_login();
-$domain = owned_hosting_domain((int) ($_GET['id'] ?? 0), $user);
-$siteId = (int) $domain['plesk_site_id'];
-$name = $domain['domain'];
-$back = 'domain.php?id=' . $domain['id'];
+
+// Staff can open any domain on the server (domain.php?plesk=<id>) without plan limits.
+// Customers can only open domains linked to their own account (domain.php?id=<id>).
+$staffMode = isset($_GET['plesk']) && is_staff($user);
+if ($staffMode) {
+    $siteId = (int) $_GET['plesk'];
+    $name = '';
+    try {
+        $name = plesk_list_domains()[$siteId]['name'] ?? '';
+    } catch (PleskError $e) {
+        flash($e->getMessage(), 'err');
+        redirect('admin-hosting.php');
+    }
+    if ($name === '') {
+        http_response_code(404);
+        exit('Domain not found in Plesk.');
+    }
+    $back = 'domain.php?plesk=' . $siteId;
+} else {
+    $domain = owned_hosting_domain((int) ($_GET['id'] ?? 0), $user);
+    $siteId = (int) $domain['plesk_site_id'];
+    $name = $domain['domain'];
+    $back = 'domain.php?id=' . $domain['id'];
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf();
@@ -19,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         switch ($_POST['action'] ?? '') {
             case 'mail_create':
-                if (count_user_mailboxes((int) $user['id']) >= max_mailboxes($user)) {
+                if (!$staffMode && count_user_mailboxes((int) $user['id']) >= max_mailboxes($user)) {
                     throw new PleskError(max_mailboxes($user) === 0
                         ? 'Email accounts are included in our paid plans. See the Billing page to upgrade.'
                         : 'Your ' . user_plan($user)['name'] . ' plan includes ' . max_mailboxes($user) . ' email account' . (max_mailboxes($user) === 1 ? '' : 's') . '. Upgrade on the Billing page for more.');
@@ -45,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 break;
             case 'dns_add':
             case 'dns_delete':
-                if (!plan_feature($user, 'dns')) {
+                if (!$staffMode && !plan_feature($user, 'dns')) {
                     throw new PleskError('Editing DNS records is included in the Business and Pro plans. See the Billing page to upgrade.');
                 }
                 if ($_POST['action'] === 'dns_delete') {
@@ -66,11 +86,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $mailboxes = $records = [];
 $loadError = '';
 $mailUsed = 0;
-$canDns = plan_feature($user, 'dns');
+$canDns = $staffMode || plan_feature($user, 'dns');
 try {
     $mailboxes = plesk_list_mailboxes($siteId);
     $records = plesk_list_dns($siteId);
-    $mailUsed = count_user_mailboxes((int) $user['id']);
+    $mailUsed = $staffMode ? 0 : count_user_mailboxes((int) $user['id']);
 } catch (PleskError $e) {
     error_log('Rowan Copy Plesk: ' . $e->getMessage());
     $loadError = 'We couldn\'t load this domain\'s settings right now. Please try again in a few minutes.';
@@ -79,7 +99,11 @@ try {
 page_header($name);
 ?>
 <div class="page">
-  <a class="back" href="<?= h(base_url('dashboard.php')) ?>">← Dashboard</a>
+  <?php if ($staffMode): ?>
+    <a class="back" href="<?= h(base_url('admin-hosting.php')) ?>">← Hosting</a>
+  <?php else: ?>
+    <a class="back" href="<?= h(base_url('dashboard.php')) ?>">← Dashboard</a>
+  <?php endif; ?>
   <h1><?= h($name) ?></h1>
   <?php if ($loadError): ?><p class="error"><?= h($loadError) ?></p><?php endif; ?>
 
@@ -110,13 +134,15 @@ page_header($name);
     </ul>
 
     <h3>Add an email account</h3>
-    <?php if (max_mailboxes($user) === 0): ?>
+    <?php if ($staffMode): ?>
+      <p class="muted small usage-note">Staff view: plan limits don't apply here.</p>
+    <?php elseif (max_mailboxes($user) === 0): ?>
       <div class="notice small">New email accounts are included in our paid plans. <a href="<?= h(base_url('billing.php')) ?>">See plans</a></div>
     <?php else: ?>
       <p class="muted small usage-note"><?= $mailUsed ?> of <?= max_mailboxes($user) ?> email accounts on your <?= h(user_plan($user)['name']) ?> plan<?= count(user_hosting_domains((int) $user['id'])) > 1 ? ' (across all your domains)' : '' ?>.</p>
     <?php endif; ?>
-    <?php if (max_mailboxes($user) === 0): ?>
-    <?php elseif ($mailUsed >= max_mailboxes($user)): ?>
+    <?php if (!$staffMode && max_mailboxes($user) === 0): ?>
+    <?php elseif (!$staffMode && $mailUsed >= max_mailboxes($user)): ?>
       <div class="notice small">You've used all the email accounts on your plan. <a href="<?= h(base_url('billing.php')) ?>">Upgrade for more</a>, or delete one you don't need.</div>
     <?php else: ?>
     <form method="post" class="mail-create">

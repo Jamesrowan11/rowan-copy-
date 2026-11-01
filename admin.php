@@ -1,13 +1,12 @@
 <?php
-// Owner-only overview and controls. Access: admin_emails in config.php.
+// Staff overview. Employees can help customers (reset links, confirm emails);
+// plans, AI limits, suspensions and takedowns are admin-only.
 require __DIR__ . '/lib/bootstrap.php';
 require __DIR__ . '/lib/layout.php';
 
-$user = require_login();
-if (!is_admin($user)) {
-    http_response_code(403);
-    exit('Admins only.');
-}
+$user = require_staff();
+$isAdmin = is_admin($user);
+const ADMIN_ONLY_ACTIONS = ['suspend', 'unsuspend', 'set_limit', 'set_plan', 'takedown', 'restore_site'];
 
 $resetLink = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -15,7 +14,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $pdo = db();
     $uid = (int) ($_POST['user_id'] ?? 0);
     $sid = (int) ($_POST['site_id'] ?? 0);
-    switch ($_POST['action'] ?? '') {
+    $action = (string) ($_POST['action'] ?? '');
+    if (!$isAdmin && in_array($action, ADMIN_ONLY_ACTIONS, true)) {
+        http_response_code(403);
+        exit('Admins only.');
+    }
+    // Employees can't act on staff accounts (a reset link for an admin would hand over admin access).
+    if (!$isAdmin && $uid) {
+        $t = $pdo->prepare('SELECT email, role FROM users WHERE id = ?');
+        $t->execute([$uid]);
+        if (($target = $t->fetch()) && user_role($target) !== 'customer') {
+            http_response_code(403);
+            exit('Only admins can manage team accounts.');
+        }
+    }
+    switch ($action) {
         case 'suspend':
             if ($uid === (int) $user['id']) {
                 flash('You can\'t suspend yourself.', 'err');
@@ -77,7 +90,7 @@ $totals = db()->query(
 )->fetch();
 
 $rows = db()->query(
-    "SELECT u.id, u.name, u.email, u.created_at, u.suspended, u.email_verified_at, u.ai_limit_override, u.plan, u.plan_source, u.subscription_status,
+    "SELECT u.id, u.name, u.email, u.role, u.created_at, u.suspended, u.email_verified_at, u.ai_limit_override, u.plan, u.plan_source, u.subscription_status,
        (SELECT COUNT(*) FROM sites s WHERE s.user_id = u.id) AS sites,
        (SELECT COUNT(*) FROM ai_usage a WHERE a.user_id = u.id AND a.status = 'ok' AND a.created_at >= $month) AS gens
      FROM users u ORDER BY u.id DESC LIMIT 500"
@@ -101,12 +114,18 @@ function admin_button(string $action, string $label, array $fields, string $conf
     return $html . '<button class="btn btn-ghost btn-sm">' . h($label) . '</button></form>';
 }
 
+$newInquiries = (int) db()->query("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")->fetchColumn();
+
 page_header('Admin');
 ?>
 <div class="page">
   <div class="page-head">
-    <h1>Admin</h1>
-    <a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-hosting.php')) ?>">Hosting customers (Plesk)</a>
+    <h1><?= $isAdmin ? 'Admin' : 'Staff' ?></h1>
+    <div class="row-actions">
+      <a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-inquiries.php')) ?>">Quote requests<?= $newInquiries ? ' <span class="badge badge-msg">' . $newInquiries . ' new</span>' : '' ?></a>
+      <a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-hosting.php')) ?>">Hosting (Plesk)</a>
+      <?php if ($isAdmin): ?><a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-team.php')) ?>">Team</a><?php endif; ?>
+    </div>
   </div>
   <?php if ($resetLink): ?>
     <div class="card">
@@ -144,26 +163,35 @@ page_header('Admin');
     <tr><th>Name</th><th>Email</th><th>Plan</th><th>Joined</th><th>Sites</th><th>AI runs / limit</th><th>Actions</th></tr>
     <?php foreach ($rows as $r): ?>
       <tr>
-        <td><?= h($r['name']) ?><?= $r['suspended'] ? ' <span class="badge badge-down">Suspended</span>' : '' ?></td>
+        <td><?= h($r['name']) ?><?= $r['suspended'] ? ' <span class="badge badge-down">Suspended</span>' : '' ?><?= user_role($r) !== 'customer' ? ' <span class="badge">' . h(ucfirst(user_role($r))) . '</span>' : '' ?></td>
         <td><?= h($r['email']) ?><?= $r['email_verified_at'] ? '' : ' <span class="badge">unconfirmed</span>' ?></td>
         <td>
+          <?php if (!$isAdmin): ?><?= h(user_plan($r)['name']) ?><?php else: ?>
           <form method="post" class="inline-form"><?= csrf_field() ?><input type="hidden" name="action" value="set_plan"><input type="hidden" name="user_id" value="<?= (int) $r['id'] ?>">
             <select name="plan" onchange="this.form.submit()" title="Set the plan by hand (no Stripe charge)">
               <?php foreach (plans() as $k => $pl): ?><option value="<?= h($k) ?>" <?= plan_key($r) === $k ? 'selected' : '' ?>><?= h($pl['name']) ?></option><?php endforeach; ?>
             </select></form>
+          <?php endif; ?>
           <span class="muted small"><?= h($r['plan_source'] === 'stripe' ? 'Stripe · ' . $r['subscription_status'] : ($r['plan_source'] === 'manual' ? 'set by you' : '')) ?></span>
         </td>
         <td><?= h(substr($r['created_at'], 0, 10)) ?></td>
         <td><?= (int) $r['sites'] ?></td>
         <td><?= (int) $r['gens'] ?> / <?= ai_limit($r) ?></td>
         <td class="admin-actions">
+          <?php $canManage = $isAdmin || user_role($r) === 'customer'; ?>
+          <?php if ($isAdmin): ?>
           <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="set_limit"><input type="hidden" name="user_id" value="<?= (int) $r['id'] ?>">
             <input name="limit" type="number" min="0" placeholder="limit" value="<?= h($r['ai_limit_override'] === null ? '' : (string) $r['ai_limit_override']) ?>" title="Monthly AI limit (blank = default)"><button class="btn btn-ghost btn-sm">Set</button></form>
+          <?php endif; ?>
+          <?php if ($canManage): ?>
           <?= admin_button('reset_link', 'Reset link', ['user_id' => $r['id']]) ?>
           <?php if (!$r['email_verified_at']): ?><?= admin_button('verify', 'Confirm email', ['user_id' => $r['id']]) ?><?php endif; ?>
+          <?php endif; ?>
+          <?php if ($isAdmin): ?>
           <?= $r['suspended']
               ? admin_button('unsuspend', 'Unsuspend', ['user_id' => $r['id']])
               : admin_button('suspend', 'Suspend', ['user_id' => $r['id']], 'Suspend this customer? Their sites go offline.') ?>
+          <?php endif; ?>
         </td>
       </tr>
     <?php endforeach; ?>
@@ -180,9 +208,9 @@ page_header('Admin');
         <td><?= $s['taken_down'] ? 'Taken down' : ($s['published_version_id'] ? 'Live' : 'Draft') ?></td>
         <td><?= number_format((int) $s['views']) ?></td>
         <td><?= h(substr($s['updated_at'], 0, 16)) ?></td>
-        <td class="admin-actions"><?= $s['taken_down']
+        <td class="admin-actions"><?= !$isAdmin ? '' : ($s['taken_down']
             ? admin_button('restore_site', 'Restore', ['site_id' => $s['id']])
-            : admin_button('takedown', 'Take down', ['site_id' => $s['id']], 'Take this site offline? The owner can\'t republish it until you restore it.') ?></td>
+            : admin_button('takedown', 'Take down', ['site_id' => $s['id']], 'Take this site offline? The owner can\'t republish it until you restore it.')) ?></td>
       </tr>
     <?php endforeach; ?>
   </table></div>

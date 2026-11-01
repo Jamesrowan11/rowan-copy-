@@ -104,7 +104,15 @@ return [
     'require_email_verification' => true,
 
     // --- Your business --------------------------------------------------------
+    // Shown on the public website (Home, About, Contact, footer).
     'company_name'  => 'Rowan Copy',
+    'tagline'       => 'Clean copy for small businesses',
+    'owner_name'    => 'Landen Rowan',
+    'location'      => 'Howard County, Maryland',
+    // Where quote requests from the Contact page are emailed, and the public contact address.
+    'contact_email' => 'landen@rowancopy.com',
+    // Domain for team email accounts created on Admin -> Team (defaults to base_url's domain).
+    'mail_domain'   => 'rowancopy.com',
     'support_email' => 'support@rowancopy.com',
 
     // Show a small "Made with Rowan Copy" link in the corner of published sites.
@@ -113,7 +121,8 @@ return [
     // Your server's public IP address. Shown to customers connecting their own domain.
     'server_ip' => '',
 
-    // Emails listed here can open admin.php and see every customer and site.
+    // Owner accounts: always admins, and can never be removed from the team.
+    // Add other admins and employees on Admin -> Team instead of here.
     'admin_emails' => [
         // 'you@example.com',
     ],

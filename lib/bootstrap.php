@@ -149,6 +149,20 @@ function migrate(PDO $pdo): void
     add_column($pdo, 'users', 'subscription_status', 'TEXT');
     add_column($pdo, 'users', 'plan_renews_at', 'TEXT');
     add_column($pdo, 'users', 'plan_cancels', 'INTEGER NOT NULL DEFAULT 0');
+    add_column($pdo, 'users', 'role', "TEXT NOT NULL DEFAULT 'customer'"); // customer | employee | admin
+    $pdo->exec('CREATE TABLE IF NOT EXISTS inquiries (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        business TEXT NOT NULL DEFAULT \'\',
+        email TEXT NOT NULL,
+        phone TEXT NOT NULL DEFAULT \'\',
+        service TEXT NOT NULL,
+        budget TEXT NOT NULL DEFAULT \'\',
+        message TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT \'new\',
+        ip TEXT NOT NULL DEFAULT \'\',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )');
     $pdo->exec('CREATE TABLE IF NOT EXISTS hosting_domains (
         id INTEGER PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -207,7 +221,7 @@ function current_user(): ?array
         return $user = null;
     }
     $stmt = db()->prepare('SELECT id, email, name, created_at, email_verified_at, session_version, suspended, ai_limit_override,
-        plan, plan_source, stripe_customer_id, subscription_status, plan_renews_at, plan_cancels FROM users WHERE id = ?');
+        plan, plan_source, stripe_customer_id, subscription_status, plan_renews_at, plan_cancels, role FROM users WHERE id = ?');
     $stmt->execute([$id]);
     $row = $stmt->fetch();
     // A password change or reset bumps session_version, which logs out every other device.
@@ -233,13 +247,56 @@ function require_login(): array
     return $user;
 }
 
-function is_admin(?array $user): bool
+/**
+ * customer, employee or admin. Emails in config.php's admin_emails are always admins
+ * (so the owner can never be locked out); everyone else gets the role set on the Team page.
+ */
+function user_role(?array $user): string
 {
     if (!$user) {
-        return false;
+        return 'guest';
     }
-    $admins = array_map('strtolower', (array) cfg('admin_emails', []));
-    return in_array(strtolower($user['email']), $admins, true);
+    if (is_owner_email((string) $user['email'])) {
+        return 'admin';
+    }
+    return in_array($user['role'] ?? '', ['employee', 'admin'], true) ? $user['role'] : 'customer';
+}
+
+function is_owner_email(string $email): bool
+{
+    return in_array(strtolower($email), array_map('strtolower', (array) cfg('admin_emails', [])), true);
+}
+
+/** Full control: plans, suspensions, takedowns, team. */
+function is_admin(?array $user): bool
+{
+    return user_role($user) === 'admin';
+}
+
+/** Admins and employees: customer support, inquiries, hosting email and DNS. */
+function is_staff(?array $user): bool
+{
+    return in_array(user_role($user), ['admin', 'employee'], true);
+}
+
+function require_staff(): array
+{
+    $user = require_login();
+    if (!is_staff($user)) {
+        http_response_code(403);
+        exit('Staff only.');
+    }
+    return $user;
+}
+
+function require_admin(): array
+{
+    $user = require_login();
+    if (!is_admin($user)) {
+        http_response_code(403);
+        exit('Admins only.');
+    }
+    return $user;
 }
 
 function log_in(int $userId): void
@@ -536,7 +593,7 @@ function serve_site(?array $site): never
     $html = render_site_html($site['html'], $site);
     if (cfg('show_badge', true) && empty(user_plan(['plan' => $site['owner_plan'] ?? 'free'])['remove_badge'])) {
         $badge = '<a href="' . h(base_url()) . '" target="_blank" rel="noopener" style="position:fixed;right:12px;bottom:12px;z-index:2147483647;'
-            . 'background:#7a2e1f;color:#fff;font:600 12px/1 system-ui,sans-serif;padding:8px 12px;border-radius:999px;text-decoration:none;'
+            . 'background:#14233f;color:#fff;font:600 12px/1 system-ui,sans-serif;padding:8px 12px;border-radius:999px;text-decoration:none;'
             . 'box-shadow:0 2px 8px rgba(0,0,0,.2)">Made with Rowan Copy</a>';
         $pos = strripos($html, '</body>');
         $html = $pos === false ? $html . $badge : substr_replace($html, $badge, $pos, 0);
