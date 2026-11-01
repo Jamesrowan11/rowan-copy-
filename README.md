@@ -27,6 +27,21 @@ Commit `lovable-site/` and `site/`, then pull on the server as usual.
 - The copywriting services menu and prices are in `lib/marketing.php`.
 - The Work page case studies are placeholders marked with [brackets] in `work.php`. Replace them with real samples.
 
+## Referral program
+
+Every customer has a link under **Refer a friend** (`rowancopy.com/r/CODE`).
+
+- A friend who signs up through it (within 30 days of clicking) gets a **free trial on their first paid plan** (`friend_trial_days`, default 30).
+- When that friend makes their **first real payment**, the customer who referred them gets **one month of their plan as credit** on their Stripe balance (Starter's price if they're on Free). Stripe applies it to their next bills automatically, and both people get an email.
+- Limits: one reward per friend, `max_rewards_per_year` per customer (default 12), no self-referrals, and only brand-new accounts count.
+- Rewards are triggered by Stripe's `invoice.paid` event, so make sure it's selected on your webhook destination.
+- **Admin** shows every referral and its status. Settings are under `'referrals'` in `config.php`; set `'enabled' => false` to turn the program off.
+
+## Search engines
+
+- `rowancopy.com/sitemap.xml` lists the public pages; `rowancopy.com/robots.txt` points to it and keeps search engines out of private portal pages.
+- In **Google Search Console**, add `rowancopy.com` as a Domain property, verify it with the TXT record Google gives you (Plesk → rowancopy.com → **DNS Settings** → Add Record → TXT), then submit `sitemap.xml` under **Sitemaps**.
+
 ## Team: admins and employees
 
 Add staff on **Admin → Team**. Each person gets an email invitation to set their password, and you can create their `@rowancopy.com` email account in Plesk at the same time.
@@ -155,7 +170,7 @@ Unlinking a domain only removes it from the portal. Nothing changes in Plesk.
 1. **Products:** in the Stripe Dashboard → **Product catalog**, create a product for each paid plan (Starter, Business, Pro). Give each one **two recurring prices**: monthly ($15 / $30 / $69) and yearly ($150 / $300 / $690). Copy each price's ID (`price_...`) into `'plans'` in `config.php`: monthly into `stripe_price`, yearly into `stripe_price_yearly`. Plan names, displayed prices, limits (AI edits, sites, email accounts, DNS) and feature lists are all set there. The Billing page shows a Monthly/Yearly switch whenever at least one yearly price is filled in.
 2. **API key:** Developers → API keys → copy the **Secret key** into `'stripe' => ['secret_key' => ...]`. Start with your **test mode** key (`sk_test_...`) and test card `4242 4242 4242 4242`, then switch to the live key.
 3. **Webhook:** Developers → Webhooks → **Add endpoint** `https://rowancopy.com/stripe-webhook.php` with these events:
-   `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`.
+   `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`.
    Copy its **Signing secret** (`whsec_...`) into `'webhook_secret'`.
 4. **Customer portal:** Settings → Billing → **Customer portal**: turn it on, allow customers to update payment methods, view invoices and cancel, and allow switching plans with all three products and both of their prices added, so customers can upgrade, downgrade, or move between monthly and yearly.
 

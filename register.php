@@ -35,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ->execute([$email, $name, password_hash($password, PASSWORD_DEFAULT)]);
             $newId = (int) db()->lastInsertId();
             log_in($newId);
+            record_referral($newId, $email, incoming_referral_code());
             if (verification_required()) {
                 send_verification_email(['id' => $newId, 'name' => $name, 'email' => $email]);
                 flash('Welcome to Rowan Copy! We sent a confirmation link to ' . $email . '. Let\'s build your first website.');
@@ -46,14 +47,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$refCode = incoming_referral_code();
+$referrer = $refCode !== '' && referrals_enabled() ? referrer_by_code($refCode) : null;
+
 page_header('Create your account', 'auth');
 ?>
 <div class="card auth-card">
   <h1>Create your account</h1>
   <p class="muted">Free to start. No credit card needed.</p>
+  <?php if ($referrer): ?>
+    <p class="notice small">🎁 <?= h(strtok($referrer['name'], ' ')) ?> invited you: your first <?= (int) referral_settings()['friend_trial_days'] ?> days on any paid plan are free.</p>
+  <?php endif; ?>
   <?php if ($error): ?><p class="error"><?= h($error) ?></p><?php endif; ?>
   <form method="post">
     <?= csrf_field() ?>
+    <?php if ($referrer): ?><input type="hidden" name="ref" value="<?= h($refCode) ?>"><?php endif; ?>
     <label>Your name <input name="name" required maxlength="100" value="<?= h($name) ?>" autocomplete="name"></label>
     <label>Email <input type="email" name="email" required maxlength="200" value="<?= h($email) ?>" autocomplete="email"></label>
     <label>Password <input type="password" name="password" required minlength="8" autocomplete="new-password"></label>

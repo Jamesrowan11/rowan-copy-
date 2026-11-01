@@ -16,6 +16,10 @@ RewriteRule ^(lib|vendor|lovable-site)(/|$) - [F,L]
 RewriteRule \.sh$ - [F,L]
 # Pretty URLs for customer sites: /s/my-bakery -> site.php?s=my-bakery
 RewriteRule ^s/([a-z0-9-]+)/?$ site.php?s=$1 [L,QSA]
+# Search engines and referral links
+RewriteRule ^sitemap\.xml$ sitemap.php [L]
+RewriteRule ^robots\.txt$ robots.php [L]
+RewriteRule ^r/([A-Za-z0-9]{4,16})/?$ ref.php?c=$1 [L,QSA]
 
 # Marketing pages. When the Lovable site is installed in site/, its pages are served
 # (index.php serves it for "/"); otherwise the built-in PHP pages are used.

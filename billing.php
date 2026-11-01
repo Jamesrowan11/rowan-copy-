@@ -44,7 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'allow_promotion_codes' => true,
                 'success_url' => base_url('billing.php?done={CHECKOUT_SESSION_ID}'),
                 'cancel_url' => base_url('billing.php'),
-                'subscription_data' => ['metadata' => ['rowan_copy_user_id' => (string) $user['id']]],
+                'subscription_data' => ['metadata' => ['rowan_copy_user_id' => (string) $user['id']]]
+                    + (referral_trial_days($user) > 0 ? ['trial_period_days' => referral_trial_days($user)] : []),
             ]);
             header('Location: ' . $session->url, true, 303);
             exit;
@@ -160,6 +161,10 @@ page_header('Billing');
         <button class="btn btn-ghost">Manage billing: card and invoices</button></form>
     <?php endif; ?>
   </div>
+
+  <?php if (!$hasSub && ($trialDays = referral_trial_days($user)) > 0): ?>
+    <div class="notice">🎁 You were invited by a friend: your first <?= $trialDays ?> days on any paid plan are free. You won't be charged until the trial ends, and you can cancel before then.</div>
+  <?php endif; ?>
 
   <?php if ($hasYearly): ?>
     <div class="interval-toggle" role="group" aria-label="Billing period">

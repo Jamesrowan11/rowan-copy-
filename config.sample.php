@@ -69,6 +69,16 @@ return [
         ],
     ],
 
+    // --- Referral program -------------------------------------------------------
+    // Friends who sign up through a customer's link (rowancopy.com/r/CODE) get a free
+    // trial on their first paid plan. When they make their first real payment, the
+    // customer who referred them gets one month of their plan as credit on their bill.
+    'referrals' => [
+        'enabled' => true,
+        'friend_trial_days' => 30,
+        'max_rewards_per_year' => 12,
+    ],
+
     // --- Stripe ----------------------------------------------------------------
     // Dashboard -> Developers -> API keys: the Secret key (sk_live_... or sk_test_...).
     // Webhook secret (whsec_...): Dashboard -> Developers -> Webhooks -> add endpoint

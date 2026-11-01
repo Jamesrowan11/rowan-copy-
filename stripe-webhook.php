@@ -57,6 +57,11 @@ try {
             sync_subscription($sub);
             break;
 
+        case 'invoice.paid':
+            // A referred customer's first real payment earns their referrer a free month.
+            reward_referral_for_payment((string) $obj->customer, (int) $obj->amount_paid);
+            break;
+
         case 'invoice.payment_failed':
             $stmt = db()->prepare('SELECT id, name, email FROM users WHERE stripe_customer_id = ?');
             $stmt->execute([(string) $obj->customer]);

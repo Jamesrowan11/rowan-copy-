@@ -114,6 +114,9 @@ function admin_button(string $action, string $label, array $fields, string $conf
     return $html . '<button class="btn btn-ghost btn-sm">' . h($label) . '</button></form>';
 }
 
+$referralRows = db()->query("SELECT r.status, r.reward_cents, r.created_at, a.email AS referrer, b.email AS friend
+    FROM referrals r JOIN users a ON a.id = r.referrer_id JOIN users b ON b.id = r.referred_id ORDER BY r.id DESC LIMIT 100")->fetchAll();
+
 $newInquiries = (int) db()->query("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")->fetchColumn();
 
 page_header('Admin');
@@ -214,5 +217,18 @@ page_header('Admin');
       </tr>
     <?php endforeach; ?>
   </table></div>
+
+  <h2>Referrals</h2>
+  <?php if (!$referralRows): ?>
+    <p class="muted small">No referrals yet. Customers find their link under "Refer a friend".</p>
+  <?php else: ?>
+    <div class="table-wrap"><table>
+      <tr><th>Referred by</th><th>Friend</th><th>Joined</th><th>Status</th></tr>
+      <?php foreach ($referralRows as $r): ?>
+        <tr><td><?= h($r['referrer']) ?></td><td><?= h($r['friend']) ?></td><td><?= h(substr($r['created_at'], 0, 10)) ?></td>
+          <td><?= $r['status'] === 'rewarded' ? 'Rewarded $' . number_format($r['reward_cents'] / 100, 2) : ($r['status'] === 'capped' ? 'Over yearly limit' : 'Signed up') ?></td></tr>
+      <?php endforeach; ?>
+    </table></div>
+  <?php endif; ?>
 </div>
 <?php page_footer();
