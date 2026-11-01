@@ -16,8 +16,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($name === '' || mb_strlen($brief) < 20) {
         $error = 'Please give your business name and at least a sentence or two about it.';
-    } elseif ((int) $count->fetchColumn() >= 10) {
-        $error = 'You can have up to 10 websites. Delete one to make room.';
+    } elseif ((int) $count->fetchColumn() >= max_sites($user)) {
+        $error = 'Your ' . user_plan($user)['name'] . ' plan includes ' . max_sites($user) . ' website' . (max_sites($user) === 1 ? '' : 's') . '. Upgrade on the Billing page for more.';
     } else {
         db()->prepare('INSERT INTO sites (user_id, name, slug, brief) VALUES (?, ?, ?, ?)')
             ->execute([$user['id'], $name, unique_slug($name), $brief]);
@@ -40,9 +40,26 @@ page_header('My sites');
   <div class="page-head">
     <div>
       <h1>Hi, <?= h(strtok($user['name'], ' ')) ?></h1>
-      <p class="muted"><?= $used ?> of <?= ai_limit($user) ?> AI designs and edits used this month.</p>
+      <p class="muted"><?= h(user_plan($user)['name']) ?> plan · <?= $used ?> of <?= ai_limit($user) ?> AI designs and edits used this month · <a href="<?= h(base_url('billing.php')) ?>"><?= plan_key($user) === 'free' ? 'Upgrade' : 'Billing' ?></a></p>
     </div>
   </div>
+
+  <?php if ($user['subscription_status'] === 'past_due'): ?>
+    <div class="notice">⚠️ Your last payment didn't go through. <a href="<?= h(base_url('billing.php')) ?>">Update your card</a> to keep your plan.</div>
+  <?php endif; ?>
+
+  <?php $hosting = user_hosting_domains((int) $user['id']); if ($hosting): ?>
+    <h2>Your domains and email</h2>
+    <div class="site-grid">
+      <?php foreach ($hosting as $d): ?>
+        <a class="site-card" href="<?= h(base_url('domain.php?id=' . $d['id'])) ?>">
+          <strong><?= h($d['domain']) ?></strong>
+          <span class="muted small">Manage email accounts and DNS records</span>
+        </a>
+      <?php endforeach; ?>
+    </div>
+    <h2>Your Rowan Copy websites</h2>
+  <?php endif; ?>
 
   <?php if (!is_verified($user)): ?>
     <div class="notice">

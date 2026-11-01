@@ -16,6 +16,10 @@ if (!is_file($configFile)) {
 }
 $GLOBALS['RC_CONFIG'] = require $configFile;
 
+require_once __DIR__ . '/billing.php';
+require_once __DIR__ . '/plesk.php';
+require_once RC_ROOT . '/vendor/autoload.php';
+
 function cfg(string $key, mixed $default = null): mixed
 {
     return $GLOBALS['RC_CONFIG'][$key] ?? $default;
@@ -138,6 +142,21 @@ function migrate(PDO $pdo): void
     add_column($pdo, 'users', 'session_version', 'INTEGER NOT NULL DEFAULT 1');
     add_column($pdo, 'users', 'suspended', 'INTEGER NOT NULL DEFAULT 0');
     add_column($pdo, 'users', 'ai_limit_override', 'INTEGER');
+    add_column($pdo, 'users', 'plan', "TEXT NOT NULL DEFAULT 'free'");
+    add_column($pdo, 'users', 'plan_source', "TEXT NOT NULL DEFAULT 'free'"); // free | stripe | manual
+    add_column($pdo, 'users', 'stripe_customer_id', 'TEXT');
+    add_column($pdo, 'users', 'stripe_subscription_id', 'TEXT');
+    add_column($pdo, 'users', 'subscription_status', 'TEXT');
+    add_column($pdo, 'users', 'plan_renews_at', 'TEXT');
+    add_column($pdo, 'users', 'plan_cancels', 'INTEGER NOT NULL DEFAULT 0');
+    $pdo->exec('CREATE TABLE IF NOT EXISTS hosting_domains (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        domain TEXT NOT NULL UNIQUE,
+        plesk_site_id INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )');
+    $pdo->exec('CREATE TABLE IF NOT EXISTS stripe_events (id TEXT PRIMARY KEY, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)');
     add_column($pdo, 'sites', 'custom_domain', 'TEXT');
     add_column($pdo, 'sites', 'taken_down', 'INTEGER NOT NULL DEFAULT 0');
     $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_domain ON sites(custom_domain)');
@@ -187,7 +206,8 @@ function current_user(): ?array
     if (!$id) {
         return $user = null;
     }
-    $stmt = db()->prepare('SELECT id, email, name, created_at, email_verified_at, session_version, suspended, ai_limit_override FROM users WHERE id = ?');
+    $stmt = db()->prepare('SELECT id, email, name, created_at, email_verified_at, session_version, suspended, ai_limit_override,
+        plan, plan_source, stripe_customer_id, subscription_status, plan_renews_at, plan_cancels FROM users WHERE id = ?');
     $stmt->execute([$id]);
     $row = $stmt->fetch();
     // A password change or reset bumps session_version, which logs out every other device.
@@ -399,13 +419,13 @@ function ai_uses_this_month(int $userId): int
     return (int) $stmt->fetchColumn();
 }
 
-/** Monthly AI allowance; an admin can raise it for one customer. */
+/** Monthly AI allowance from the customer's plan; an admin can override it for one customer. */
 function ai_limit(?array $user = null): int
 {
-    if ($user && $user['ai_limit_override'] !== null) {
+    if ($user && ($user['ai_limit_override'] ?? null) !== null) {
         return (int) $user['ai_limit_override'];
     }
-    return (int) cfg('monthly_ai_limit', 40);
+    return (int) (user_plan($user)['ai_limit'] ?? cfg('monthly_ai_limit', 10));
 }
 
 // ---------------------------------------------------------------------------
@@ -514,7 +534,7 @@ function serve_site(?array $site): never
     }
 
     $html = render_site_html($site['html'], $site);
-    if (cfg('show_badge', true)) {
+    if (cfg('show_badge', true) && empty(user_plan(['plan' => $site['owner_plan'] ?? 'free'])['remove_badge'])) {
         $badge = '<a href="' . h(base_url()) . '" target="_blank" rel="noopener" style="position:fixed;right:12px;bottom:12px;z-index:2147483647;'
             . 'background:#7a2e1f;color:#fff;font:600 12px/1 system-ui,sans-serif;padding:8px 12px;border-radius:999px;text-decoration:none;'
             . 'box-shadow:0 2px 8px rgba(0,0,0,.2)">Made with Rowan Copy</a>';
@@ -529,7 +549,7 @@ function serve_site(?array $site): never
     exit;
 }
 
-const SITE_SERVE_SQL = 'SELECT s.*, v.html, u.suspended AS owner_suspended FROM sites s
+const SITE_SERVE_SQL = 'SELECT s.*, v.html, u.suspended AS owner_suspended, u.plan AS owner_plan FROM sites s
     JOIN versions v ON v.id = s.published_version_id JOIN users u ON u.id = s.user_id';
 
 // ---------------------------------------------------------------------------

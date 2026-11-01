@@ -27,6 +27,7 @@ function page_header(string $title, string $bodyClass = ''): void
   <nav>
     <?php if ($user): ?>
       <a href="<?= h(base_url('dashboard.php')) ?>">My sites</a>
+      <a href="<?= h(base_url('billing.php')) ?>">Billing</a>
       <a href="<?= h(base_url('account.php')) ?>">Account</a>
       <?php if (is_admin($user)): ?><a href="<?= h(base_url('admin.php')) ?>">Admin</a><?php endif; ?>
       <form method="post" action="<?= h(base_url('logout.php')) ?>" class="inline"><?= csrf_field() ?><button class="link">Log out</button></form>

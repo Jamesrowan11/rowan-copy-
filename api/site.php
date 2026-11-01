@@ -70,6 +70,9 @@ switch ($_POST['action'] ?? '') {
 
     case 'domain':
         $raw = post_str('domain', 260);
+        if ($raw !== '' && !plan_feature($user, 'custom_domain')) {
+            json_out(['error' => 'Connecting your own domain is part of our paid plans. See the Billing page to upgrade.'], 403);
+        }
         $domain = $raw === '' ? '' : normalize_domain($raw);
         if ($raw !== '' && $domain === '') {
             json_out(['error' => 'That doesn\'t look like a domain name. Enter something like mybakery.com.'], 422);
@@ -106,8 +109,8 @@ switch ($_POST['action'] ?? '') {
     case 'duplicate':
         $count = $pdo->prepare('SELECT COUNT(*) FROM sites WHERE user_id = ?');
         $count->execute([$user['id']]);
-        if ((int) $count->fetchColumn() >= 10) {
-            json_out(['error' => 'You can have up to 10 websites. Delete one to make room.'], 422);
+        if ((int) $count->fetchColumn() >= max_sites($user)) {
+            json_out(['error' => 'Your plan includes ' . max_sites($user) . ' website(s). Upgrade on the Billing page for more.'], 422);
         }
         $pdo->beginTransaction();
         $name = mb_substr($site['name'] . ' (copy)', 0, 80);

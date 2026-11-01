@@ -134,6 +134,9 @@ page_header('Editing ' . $site['name'], 'editor-page');
       <hr>
       <h2>Your own domain</h2>
       <p class="muted small">Use a domain you own (like <em>mybakery.com</em>) instead of the Rowan Copy address.</p>
+      <?php if (!plan_feature($user, 'custom_domain') && !$site['custom_domain']): ?>
+        <p class="notice small">Your own domain is included in paid plans. <a href="<?= h(base_url('billing.php')) ?>">See plans</a></p>
+      <?php endif; ?>
       <form id="domain-form">
         <label>Domain <input name="domain" maxlength="253" placeholder="mybakery.com" value="<?= h($site['custom_domain']) ?>"></label>
         <button class="btn btn-sm">Save domain</button>

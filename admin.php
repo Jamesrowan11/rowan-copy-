@@ -35,6 +35,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ->execute([$raw === '' ? null : max(0, (int) $raw), $uid]);
             flash($raw === '' ? 'AI limit set back to the default.' : 'AI limit updated.');
             break;
+        case 'set_plan':
+            $plan = (string) ($_POST['plan'] ?? 'free');
+            if (isset(plans()[$plan])) {
+                $pdo->prepare('UPDATE users SET plan = ?, plan_source = ? WHERE id = ?')
+                    ->execute([$plan, $plan === 'free' ? 'free' : 'manual', $uid]);
+                flash('Plan set to ' . plans()[$plan]['name'] . '. Stripe won\'t charge for a plan you set here.');
+            }
+            break;
         case 'verify':
             $pdo->prepare('UPDATE users SET email_verified_at = CURRENT_TIMESTAMP WHERE id = ?')->execute([$uid]);
             flash('Email marked as confirmed.');
@@ -69,7 +77,7 @@ $totals = db()->query(
 )->fetch();
 
 $rows = db()->query(
-    "SELECT u.id, u.name, u.email, u.created_at, u.suspended, u.email_verified_at, u.ai_limit_override,
+    "SELECT u.id, u.name, u.email, u.created_at, u.suspended, u.email_verified_at, u.ai_limit_override, u.plan, u.plan_source, u.subscription_status,
        (SELECT COUNT(*) FROM sites s WHERE s.user_id = u.id) AS sites,
        (SELECT COUNT(*) FROM ai_usage a WHERE a.user_id = u.id AND a.status = 'ok' AND a.created_at >= $month) AS gens
      FROM users u ORDER BY u.id DESC LIMIT 500"
@@ -96,7 +104,10 @@ function admin_button(string $action, string $label, array $fields, string $conf
 page_header('Admin');
 ?>
 <div class="page">
-  <h1>Admin</h1>
+  <div class="page-head">
+    <h1>Admin</h1>
+    <a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-hosting.php')) ?>">Hosting customers (Plesk)</a>
+  </div>
   <?php if ($resetLink): ?>
     <div class="card">
       <h2>Password reset link</h2>
@@ -130,11 +141,18 @@ page_header('Admin');
 
   <h2>Customers</h2>
   <div class="table-wrap"><table>
-    <tr><th>Name</th><th>Email</th><th>Joined</th><th>Sites</th><th>AI runs / limit</th><th>Actions</th></tr>
+    <tr><th>Name</th><th>Email</th><th>Plan</th><th>Joined</th><th>Sites</th><th>AI runs / limit</th><th>Actions</th></tr>
     <?php foreach ($rows as $r): ?>
       <tr>
         <td><?= h($r['name']) ?><?= $r['suspended'] ? ' <span class="badge badge-down">Suspended</span>' : '' ?></td>
         <td><?= h($r['email']) ?><?= $r['email_verified_at'] ? '' : ' <span class="badge">unconfirmed</span>' ?></td>
+        <td>
+          <form method="post" class="inline-form"><?= csrf_field() ?><input type="hidden" name="action" value="set_plan"><input type="hidden" name="user_id" value="<?= (int) $r['id'] ?>">
+            <select name="plan" onchange="this.form.submit()" title="Set the plan by hand (no Stripe charge)">
+              <?php foreach (plans() as $k => $pl): ?><option value="<?= h($k) ?>" <?= plan_key($r) === $k ? 'selected' : '' ?>><?= h($pl['name']) ?></option><?php endforeach; ?>
+            </select></form>
+          <span class="muted small"><?= h($r['plan_source'] === 'stripe' ? 'Stripe · ' . $r['subscription_status'] : ($r['plan_source'] === 'manual' ? 'set by you' : '')) ?></span>
+        </td>
         <td><?= h(substr($r['created_at'], 0, 10)) ?></td>
         <td><?= (int) $r['sites'] ?></td>
         <td><?= (int) $r['gens'] ?> / <?= ai_limit($r) ?></td>
