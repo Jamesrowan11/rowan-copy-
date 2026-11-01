@@ -9,31 +9,12 @@ $v = ['name' => '', 'business' => '', 'email' => '', 'phone' => '', 'service' =>
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf();
-    foreach (['name' => 120, 'business' => 160, 'email' => 200, 'phone' => 40, 'service' => 60, 'budget' => 80, 'message' => 5000] as $k => $max) {
-        $v[$k] = post_str($k, $max);
-    }
+    $v = inquiry_fields($_POST);
     if (!empty($_POST['_hp'])) {
         $sent = true; // spam trap: pretend it worked
-    } elseif (!throttle('inquiry:' . client_ip(), 5, 3600)) {
-        $errors['form'] = 'You\'ve sent several requests already. Please email us instead.';
     } else {
-        if ($v['name'] === '') { $errors['name'] = 'Please enter your name.'; }
-        if (!filter_var($v['email'], FILTER_VALIDATE_EMAIL)) { $errors['email'] = 'Please enter a valid email.'; }
-        if (!in_array($v['service'], INQUIRY_SERVICES, true)) { $errors['service'] = 'Please choose what you need.'; }
-        if ($v['message'] === '') { $errors['message'] = 'Please tell us a bit about the project.'; }
-        if (!$errors) {
-            db()->prepare('INSERT INTO inquiries (name, business, email, phone, service, budget, message, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-                ->execute([$v['name'], $v['business'], strtolower($v['email']), $v['phone'], $v['service'], $v['budget'], $v['message'], client_ip()]);
-            $id = (int) db()->lastInsertId();
-            // Alert the studio, and confirm to the person who asked.
-            send_email($c['email'], "New quote request: {$v['service']} from {$v['name']}",
-                "Name: {$v['name']}\nBusiness: {$v['business']}\nEmail: {$v['email']}\nPhone: {$v['phone']}\nService: {$v['service']}\nBudget: {$v['budget']}\n\n{$v['message']}\n\n"
-                . 'See all requests: ' . base_url('admin-inquiries.php') . "\n");
-            send_email($v['email'], "We got your request, {$v['name']}",
-                "Hi {$v['name']},\n\nThanks for reaching out to {$c['name']}. We received your request for {$v['service']} and will reply within one business day with a quote, a timeline, and any questions.\n\n"
-                . "If you'd like to get started on a website right away, you can build one yourself here: " . base_url('register.php') . "\n\n{$c['owner']}\n{$c['name']}\n{$c['email']}\n");
-            $sent = true;
-        }
+        $errors = save_inquiry($v);
+        $sent = !$errors;
     }
 }
 

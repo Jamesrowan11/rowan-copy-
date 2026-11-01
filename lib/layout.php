@@ -53,7 +53,7 @@ function page_header(string $title, string $bodyClass = '', string $description 
       <form method="post" action="<?= h(base_url('logout.php')) ?>" class="inline"><?= csrf_field() ?><button class="link">Log out</button></form>
     <?php else: ?>
       <?php foreach (PUBLIC_NAV as $href => $label): ?>
-        <a href="<?= h(base_url($href)) ?>"<?= $current === $href ? ' aria-current="page"' : '' ?>><?= h($label) ?></a>
+        <a href="<?= h(base_url($href)) ?>"<?= $current === $href . '.php' ? ' aria-current="page"' : '' ?>><?= h($label) ?></a>
       <?php endforeach; ?>
       <a href="<?= h(base_url('login.php')) ?>" class="nav-login">Log in</a>
       <a class="btn btn-sm btn-accent" href="<?= h(base_url('register.php')) ?>">Build your website</a>

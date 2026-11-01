@@ -12,6 +12,11 @@ if ($host !== '' && $host !== strtolower((string) parse_url((string) cfg('base_u
     }
 }
 
+// The Lovable marketing site, when installed in site/, is the home page.
+if (lovable_site_installed()) {
+    serve_lovable_site();
+}
+
 $c = company();
 $loggedIn = (bool) current_user();
 $why = [
