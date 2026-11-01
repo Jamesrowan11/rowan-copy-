@@ -118,6 +118,11 @@ function count_user_mailboxes(int $userId): int
  */
 function sync_subscription(\Stripe\Subscription $sub): void
 {
+    // Domain subscriptions are separate from website plans.
+    if (($sub->metadata['rc_kind'] ?? '') === 'domain') {
+        sync_domain_subscription($sub);
+        return;
+    }
     $customerId = is_string($sub->customer) ? $sub->customer : $sub->customer->id;
     $stmt = db()->prepare('SELECT id, plan, plan_source, stripe_subscription_id FROM users WHERE stripe_customer_id = ?');
     $stmt->execute([$customerId]);

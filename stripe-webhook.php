@@ -34,6 +34,10 @@ try {
     $obj = $event->data->object;
     switch ($event->type) {
         case 'checkout.session.completed':
+            if (($obj->metadata['rc_kind'] ?? '') === 'domain') {
+                fulfill_domain_order((int) $obj->metadata['domain_order_id'], $obj->subscription ? (string) $obj->subscription : null);
+                break;
+            }
             if ($obj->mode === 'subscription' && $obj->subscription) {
                 // Make sure the Stripe customer is linked to the right account.
                 $uid = (int) $obj->client_reference_id;
@@ -58,6 +62,11 @@ try {
             break;
 
         case 'invoice.paid':
+            // Yearly domain renewals: renew at Name.com once the customer's payment is in.
+            $subId = (string) ($obj->subscription ?? ($obj->parent->subscription_details->subscription ?? ''));
+            if ($subId !== '' && ($obj->billing_reason ?? '') === 'subscription_cycle') {
+                renew_domain_for_subscription($subId);
+            }
             // A referred customer's first real payment earns their referrer a free month.
             reward_referral_for_payment((string) $obj->customer, (int) $obj->amount_paid);
             break;

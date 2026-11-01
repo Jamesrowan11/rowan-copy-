@@ -294,9 +294,21 @@
       if (r.error) return alert(r.error);
       e.target.domain.value = r.domain;
       $('#domain-help').hidden = !r.domain;
+      if ($('#domain-status')) { $('#domain-status').textContent = 'Not connected yet'; $('#domain-status').className = 'domain-status'; $('#connect-domain').textContent = 'Connect'; }
       $('#live-link').textContent = r.url;
       $('#live-link').href = r.url;
-      alert(r.domain ? 'Domain saved. Follow the steps below to connect it.' : 'Domain removed.');
+      alert(r.domain ? 'Domain saved. Point its DNS at us (steps below), then click Connect.' : 'Domain removed.');
+    });
+  });
+
+  var connectBtn = $('#connect-domain');
+  if (connectBtn) connectBtn.addEventListener('click', function () {
+    connectBtn.disabled = true; connectBtn.textContent = 'Checking…';
+    siteAction('connect_domain').then(function (r) {
+      connectBtn.disabled = false;
+      var st = $('#domain-status');
+      if (r.error) { st.textContent = r.error; st.className = 'domain-status err'; connectBtn.textContent = 'Try again'; return; }
+      st.textContent = '✓ ' + r.message; st.className = 'domain-status ok'; connectBtn.textContent = 'Check again';
     });
   });
 

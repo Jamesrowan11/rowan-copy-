@@ -79,6 +79,22 @@ return [
         'max_rewards_per_year' => 12,
     ],
 
+    // --- Domain sales (Name.com reseller account) --------------------------------
+    // Name.com → Account → API settings: create an API token. Start with the
+    // sandbox (api.dev.name.com, uses your sandbox username and token, nothing is
+    // really registered); switch api_base to https://api.name.com/core/v1 and use
+    // your production token to sell real domains.
+    'namecom' => [
+        'username' => '',
+        'token' => '',
+        'api_base' => 'https://api.dev.name.com/core/v1',
+        'markup' => 5.00,           // added to Name.com's yearly price (rounded up to .99)
+        'tlds' => ['com', 'net', 'org', 'co', 'us'],
+        // Stripe product tax code for domain sales. Leave empty to sell domains as
+        // regular (not Managed Payments) charges; ask your accountant about tax.
+        'tax_code' => '',
+    ],
+
     // --- Stripe ----------------------------------------------------------------
     // Dashboard -> Developers -> API keys: the Secret key (sk_live_... or sk_test_...).
     // Webhook secret (whsec_...): Dashboard -> Developers -> Webhooks -> add endpoint

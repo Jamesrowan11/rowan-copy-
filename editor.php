@@ -148,8 +148,11 @@ page_header('Editing ' . $site['name'], 'editor-page');
         <?php else: ?>
           add a <strong>CNAME record</strong> for <code>www</code> pointing to <code><?= h($appHost) ?></code>.
         <?php endif; ?>
-        Then email us so we can switch on the secure (https) certificate. It can take up to 24 hours to start working.</p>
+        Then click <strong>Connect</strong>. DNS changes can take a few hours to reach everyone.</p>
+        <p id="domain-status" class="domain-status <?= $site['domain_connected_at'] ? 'ok' : '' ?>"><?= $site['domain_connected_at'] ? '✓ Connected' : 'Not connected yet' ?></p>
+        <button type="button" id="connect-domain" class="btn btn-sm"><?= $site['domain_connected_at'] ? 'Check again' : 'Connect' ?></button>
       </div>
+      <p class="muted small">Don't have a domain yet? <a href="<?= h(base_url('domains.php')) ?>">Find one</a></p>
       <hr>
       <h2>Tools</h2>
       <div class="row-actions">

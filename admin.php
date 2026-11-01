@@ -127,6 +127,7 @@ page_header('Admin');
     <div class="row-actions">
       <a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-inquiries.php')) ?>">Quote requests<?= $newInquiries ? ' <span class="badge badge-msg">' . $newInquiries . ' new</span>' : '' ?></a>
       <a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-hosting.php')) ?>">Hosting (Plesk)</a>
+      <a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-domains.php')) ?>">Domains</a>
       <?php if ($isAdmin): ?><a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-team.php')) ?>">Team</a><?php endif; ?>
     </div>
   </div>
@@ -151,8 +152,8 @@ page_header('Admin');
   <p class="muted small">Check exact charges in your Claude Console billing page.</p>
 
   <?php if ($domains): ?>
-    <h2>Custom domains to connect</h2>
-    <p class="muted small">In Plesk, add each one as a domain alias of this app's domain, then issue an SSL certificate that covers it.</p>
+    <h2>Custom domains</h2>
+    <p class="muted small">Connect them (or check their status) on the <a href="<?= h(base_url('admin-domains.php')) ?>">Domains</a> page.</p>
     <div class="table-wrap"><table>
       <tr><th>Domain</th><th>Site</th><th>Owner</th></tr>
       <?php foreach ($domains as $s): ?>
