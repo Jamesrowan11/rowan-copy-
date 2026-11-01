@@ -4,7 +4,22 @@ An AI website builder for small businesses. Customers create an account, describ
 
 Built with plain PHP and SQLite, so it runs on ordinary cPanel / GoDaddy shared hosting. No separate database server is needed.
 
-## The public website
+## The public website (built with Lovable)
+
+The marketing site (Home, Services, Work, About, Pricing, Contact) is designed in Lovable, with scroll-driven animation, and served from your own server as plain HTML files:
+
+- `lovable-site/` is the site's source code, copied from the Lovable project.
+- `site/` is the built site that visitors see. It's committed to Git, so the web server never needs Node.js.
+- `.htaccess` serves `site/` for `/`, `/services`, `/work`, `/about`, `/pricing` and `/contact`. If `site/` is missing, the built-in PHP pages below are used instead.
+- The site's Contact form posts to `api/inquiry.php` (saved to **Admin → Quote requests** and emailed), and Pricing reads live plans from `api/plans.php`.
+
+**Changing the design:** edit it in Lovable, then rebuild on any computer with Node.js 20+ (copy the changed files from Lovable into `lovable-site/` first):
+```bash
+./build-site.sh
+```
+Commit `lovable-site/` and `site/`, then pull on the server as usual.
+
+### Built-in PHP pages (fallback)
 
 `index.php` (Home), `services.php`, `work.php`, `about.php`, `pricing.php` and `contact.php` are the Rowan Copy studio website, brought over from the old Node.js site: copywriting services, website plans, and a **Get a quote** form. Quote requests are saved and emailed to `contact_email`, the person gets a confirmation email, and staff work through them on **Admin → Quote requests**.
 
@@ -99,7 +114,8 @@ Replace `rowancopy.com` below with your domain.
    ```
 8. **nginx directives.** Plesk puts nginx in front of Apache, and nginx serves static files itself, skipping `.htaccess`. Under **Apache & nginx Settings → Additional nginx directives**, paste:
    ```nginx
-   location ~ ^/(vendor|lib)/ { deny all; }
+   location ~ ^/(vendor|lib|lovable-site)/ { deny all; }
+   location ~ \.sh$ { deny all; }
    location ~ ^/(config\.php|config\.sample\.php|composer\.(json|lock)|README\.md)$ { deny all; }
    location ~ /\.(?!well-known) { deny all; }
    proxy_read_timeout 600s;

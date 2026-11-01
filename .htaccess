@@ -12,14 +12,17 @@ DirectoryIndex index.php
 
 RewriteEngine On
 # Block lib/ and vendor/ folders entirely
-RewriteRule ^(lib|vendor)(/|$) - [F,L]
+RewriteRule ^(lib|vendor|lovable-site)(/|$) - [F,L]
+RewriteRule \.sh$ - [F,L]
 # Pretty URLs for customer sites: /s/my-bakery -> site.php?s=my-bakery
 RewriteRule ^s/([a-z0-9-]+)/?$ site.php?s=$1 [L,QSA]
 
 # Marketing pages. When the Lovable site is installed in site/, its pages are served
 # (index.php serves it for "/"); otherwise the built-in PHP pages are used.
 RewriteCond %{DOCUMENT_ROOT}/site/index.html -f
-RewriteRule ^(services|work|about|pricing|contact)/?$ site/index.html [L]
+RewriteRule ^(services|work|about|pricing|contact)/?$ site/$1/index.html [L]
+# The marketing site's scripts and styles
+RewriteRule ^static/(.+)$ site/static/$1 [L]
 RewriteRule ^(services|work|about|pricing|contact)/?$ $1.php [L]
 # Old .php addresses of the marketing pages move to the clean ones once the Lovable site is in.
 RewriteCond %{DOCUMENT_ROOT}/site/index.html -f
