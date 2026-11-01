@@ -366,3 +366,11 @@ a.m-card:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(20,35
 .share-row { margin-top: 14px; }
 .referral-banner { text-decoration: none; color: var(--ink); justify-content: flex-start; }
 .referral-banner:hover { border-color: var(--accent); }
+
+/* domains */
+.domain-search { display: flex; gap: 8px; max-width: 560px; margin-bottom: 18px; }
+.domain-search input { margin: 0; flex: 1; font-size: 1.05rem; }
+.domain-results td { white-space: normal; }
+.domain-status { font-weight: 600; margin: 10px 0 8px; }
+.domain-status.ok { color: var(--ok); }
+.domain-status.err { color: var(--err); font-weight: 500; }

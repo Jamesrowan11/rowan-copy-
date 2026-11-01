@@ -1,7 +1,7 @@
 <?php
 // ============================================================================
 // POST api/site.php: everything in the editor that isn't AI.
-// action = publish | unpublish | restore | settings | domain | get_html | save_html | duplicate | delete | upload | delete_image
+// action = publish | unpublish | restore | settings | domain | connect_domain | get_html | save_html | duplicate | delete | upload | delete_image
 // ============================================================================
 
 require __DIR__ . '/../lib/bootstrap.php';
@@ -84,8 +84,26 @@ switch ($_POST['action'] ?? '') {
                 json_out(['error' => 'That domain is already connected to another Rowan Copy site.'], 422);
             }
         }
+        if ($domain !== (string) $site['custom_domain']) {
+            disconnect_custom_domain($site); // the old domain stops pointing at this site
+        }
         $pdo->prepare('UPDATE sites SET custom_domain = ? WHERE id = ?')->execute([$domain !== '' ? $domain : null, $siteId]);
         json_out(['ok' => true, 'domain' => $domain, 'url' => public_url(['custom_domain' => $domain] + $site)]);
+
+    case 'connect_domain':
+        if (!plan_feature($user, 'custom_domain') && !is_staff($user)) {
+            json_out(['error' => 'Connecting your own domain is part of our paid plans.'], 403);
+        }
+        if (!throttle('connect:' . $siteId, 10, 600)) {
+            json_out(['error' => 'Please wait a few minutes before checking again.'], 429);
+        }
+        try {
+            $r = connect_custom_domain($site);
+        } catch (PleskError $e) {
+            error_log('Rowan Copy connect domain: ' . $e->getMessage());
+            json_out(['error' => 'Your DNS is set up correctly, but we couldn\'t finish connecting it. Our team has been notified.'], 500);
+        }
+        json_out($r['ok'] ? ['ok' => true, 'message' => $r['message']] : ['error' => $r['message']], $r['ok'] ? 200 : 422);
 
     case 'get_html':
         $v = $pdo->prepare('SELECT html FROM versions WHERE id = ?');

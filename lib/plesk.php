@@ -315,3 +315,119 @@ function owned_hosting_domain(int $id, array $user): array
     }
     return $d;
 }
+
+// ---------------------------------------------------------------------------
+// Plesk command-line actions, run through Plesk's REST API
+// (POST /api/v2/cli/<command>/call) with the same secret key. Only the
+// commands below are ever sent, with validated arguments.
+// ---------------------------------------------------------------------------
+
+/** @return array{code:int, stdout:string, stderr:string} */
+function plesk_cli(string $command, array $params): array
+{
+    if (!in_array($command, ['site-alias', 'domain'], true)) {
+        throw new PleskError('That Plesk command is not allowed.');
+    }
+    if (!plesk_enabled()) {
+        throw new PleskError('Plesk is not connected yet. Add the Plesk API key to config.php.');
+    }
+    $p = (array) cfg('plesk');
+    $url = rtrim((string) $p['url'], '/') . '/api/v2/cli/' . $command . '/call';
+    $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+    $verify = (bool) ($p['verify_tls'] ?? true) || !in_array($host, ['127.0.0.1', 'localhost', '::1', '[::1]'], true);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode(['params' => array_values(array_map('strval', $params))]),
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Accept: application/json', 'X-API-Key: ' . $p['key']],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 120,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_SSL_VERIFYPEER => $verify,
+        CURLOPT_SSL_VERIFYHOST => $verify ? 2 : 0,
+    ]);
+    $body = curl_exec($ch);
+    $err = curl_error($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    $json = is_string($body) ? json_decode($body, true) : null;
+    if ($status !== 200 || !is_array($json)) {
+        error_log("Rowan Copy: Plesk CLI $command HTTP $status $err " . substr((string) $body, 0, 500));
+        throw new PleskError('Plesk did not accept the request' . ($err ? ": $err" : " (HTTP $status)") . '.');
+    }
+    $result = ['code' => (int) ($json['code'] ?? 1), 'stdout' => (string) ($json['stdout'] ?? ''), 'stderr' => (string) ($json['stderr'] ?? '')];
+    if ($result['code'] !== 0) {
+        error_log("Rowan Copy: Plesk CLI $command failed: " . $result['stderr'] . $result['stdout']);
+        throw new PleskError('Plesk: ' . trim($result['stderr'] ?: $result['stdout'] ?: 'the command failed.'));
+    }
+    return $result;
+}
+
+/** The main Rowan Copy domain in Plesk (customer domains are attached to it). */
+function main_plesk_domain(): string
+{
+    $host = strtolower((string) (cfg('mail_domain') ?: parse_url((string) cfg('base_url'), PHP_URL_HOST)));
+    return preg_replace('/^(www|app|portal)\./', '', $host) ?? $host;
+}
+
+/** Point a customer's own domain (and www) at the Rowan Copy app as a Plesk domain alias. */
+function plesk_add_site_alias(string $domain): void
+{
+    if (normalize_domain($domain) !== $domain) {
+        throw new PleskError('Invalid domain.');
+    }
+    try {
+        plesk_cli('site-alias', ['--create', $domain, '-domain', main_plesk_domain(), '-www', 'true']);
+    } catch (PleskError $e) {
+        if (stripos($e->getMessage(), 'exist') === false) {
+            throw $e; // "already exists" means it's connected; anything else is a real failure
+        }
+    }
+}
+
+function plesk_remove_site_alias(string $domain): void
+{
+    if (normalize_domain($domain) !== $domain) {
+        throw new PleskError('Invalid domain.');
+    }
+    plesk_cli('site-alias', ['--remove', $domain]);
+}
+
+/**
+ * Create a purchased domain in Plesk as an add-on domain of the main subscription:
+ * it gets its own email service, and its website is the Rowan Copy app (same
+ * document root), which shows the customer's site for that domain.
+ */
+function plesk_add_hosted_domain(string $domain): void
+{
+    if (normalize_domain($domain) !== $domain) {
+        throw new PleskError('Invalid domain.');
+    }
+    $params = ['--create', $domain, '-webspace-name', main_plesk_domain(), '-www-root', (string) cfg('plesk_docroot', 'httpdocs')];
+    if (cfg('server_ip')) {
+        array_push($params, '-ip', (string) cfg('server_ip'));
+    }
+    try {
+        plesk_cli('domain', $params);
+    } catch (PleskError $e) {
+        if (stripos($e->getMessage(), 'exist') === false) {
+            throw $e;
+        }
+    }
+}
+
+/**
+ * Does the domain (and www) point at this server yet?
+ * @return array{ok:bool, root:list<string>, www:list<string>}
+ */
+function domain_points_here(string $domain): array
+{
+    $ip = (string) cfg('server_ip');
+    $lookup = function (string $host): array {
+        $recs = @dns_get_record($host, DNS_A);
+        return array_values(array_unique(array_map(fn ($r) => (string) ($r['ip'] ?? ''), is_array($recs) ? $recs : [])));
+    };
+    $root = $lookup($domain);
+    $www = $lookup('www.' . $domain);
+    return ['ok' => $ip !== '' && in_array($ip, $root, true), 'root' => $root, 'www' => $www];
+}

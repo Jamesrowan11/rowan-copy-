@@ -181,6 +181,28 @@ How it works:
 - On **Admin → Customers**, you can set any customer's plan by hand (for customers you bill some other way). Stripe never charges for a plan you set there.
 - Every existing account starts on the **Free** plan, so set your current customers' plans on the Admin page after updating.
 
+## Domains: Connect button and selling domains (Name.com)
+
+**Connect a domain the customer already owns.** In the site editor's **Settings**, the customer enters their domain and clicks **Connect**. The portal checks that the domain's DNS points at `server_ip`, then adds it to Plesk as an alias of rowancopy.com, so their published site shows up there. If the DNS isn't right yet, they're told exactly which A record to add. Staff can see and connect or disconnect these on **Admin → Domains**.
+
+**Sell domains in the portal.** Customers search on **Domains**, pay yearly through Stripe (Name.com's price + your markup), and the portal then:
+1. registers the domain at Name.com in the customer's name,
+2. points it at your server (website, www, mail, webmail, MX and SPF records),
+3. adds it to Plesk as a domain under the rowancopy.com subscription, so it can have email accounts, and links it to the customer,
+4. renews it at Name.com each year when the Stripe renewal invoice is paid. If the customer turns off auto-renew, it simply expires at the end of the year.
+
+Setup:
+1. Create a [Name.com](https://www.name.com) account, then go to **Account → Settings → Security → API Token** and create a token. You get a **sandbox** (test) token and a **production** token.
+2. In `config.php`, fill in `'namecom'` (see `config.sample.php`): `username`, `token`, and `api_base`. Start with the sandbox (`https://api.dev.name.com/core/v1`) and the sandbox token.
+3. Open **Admin → Domains → Test connection**. It shows a test .com price and what customers would pay.
+4. Buy a test domain in the sandbox with Stripe test mode. When it works, switch to `https://api.name.com/core/v1` with the production token, and **add funds to your Name.com account**, because registrations are paid from that balance.
+5. Make sure `server_ip` and `mail_domain` are set, and that the Stripe webhook includes `invoice.paid` (it's in the list above).
+6. In Plesk, open **Tools & Settings → SSL It! (or Let's Encrypt) → Keep websites secured** so new domains and aliases get free certificates automatically.
+
+Domain sales skip Stripe Managed Payments unless you set a `tax_code` under `'namecom'`. Ask your accountant whether domains need sales tax in Maryland.
+
+If a registration fails after payment, the customer sees a message, you get an email, and an admin can click **Retry registration** on **Admin → Domains** (or refund the payment in Stripe).
+
 ## Setup on cPanel
 
 1. **Create a subdomain or domain** for the app (for example `rowancopy.com` or `app.rowancopy.com`) and note its document root folder.
@@ -222,5 +244,5 @@ Every design or edit is one Claude API call. To protect your API bill:
 ## Not built yet (good next steps)
 
 - Multi-page sites (each site is currently one page with sections)
-- Automatic SSL for customer domains (today you add each one as a Plesk domain alias)
+- Domain transfers from other registrars
 - Two-factor login

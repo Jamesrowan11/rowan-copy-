@@ -19,6 +19,8 @@ $GLOBALS['RC_CONFIG'] = require $configFile;
 require_once __DIR__ . '/billing.php';
 require_once __DIR__ . '/plesk.php';
 require_once __DIR__ . '/referrals.php';
+require_once __DIR__ . '/registrar.php';
+require_once __DIR__ . '/domains.php';
 require_once RC_ROOT . '/vendor/autoload.php';
 
 function cfg(string $key, mixed $default = null): mixed
@@ -152,6 +154,25 @@ function migrate(PDO $pdo): void
     add_column($pdo, 'users', 'plan_cancels', 'INTEGER NOT NULL DEFAULT 0');
     add_column($pdo, 'users', 'role', "TEXT NOT NULL DEFAULT 'customer'"); // customer | employee | admin
     add_column($pdo, 'users', 'referral_code', 'TEXT');
+    add_column($pdo, 'sites', 'domain_connected_at', 'TEXT');
+    $pdo->exec("CREATE TABLE IF NOT EXISTS domain_orders (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        domain TEXT NOT NULL,
+        site_id INTEGER,
+        wholesale REAL NOT NULL,           -- Name.com price per year (USD)
+        price_cents INTEGER NOT NULL,      -- what the customer pays per year
+        contact TEXT NOT NULL,             -- registrant details (JSON)
+        status TEXT NOT NULL DEFAULT 'pending', -- pending | registering | registered | active | setup_failed | failed | expiring
+        autorenew INTEGER NOT NULL DEFAULT 1,
+        stripe_session_id TEXT,
+        stripe_subscription_id TEXT,
+        expires_at TEXT,
+        error TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )");
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_domain_orders_sub ON domain_orders(stripe_subscription_id)');
     $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code)');
     $pdo->exec("CREATE TABLE IF NOT EXISTS referrals (
         id INTEGER PRIMARY KEY,
