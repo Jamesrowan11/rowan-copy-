@@ -21,7 +21,7 @@ __APP_DOMAIN__ {
 	# Never serve private files (code, config, tests, scripts, dotfiles).
 	# These run first inside the route below; Caddy would otherwise run route before respond.
 	@private {
-		path /lib/* /vendor/* /lovable-site/* /tests/* /infra/* /config.php /config.sample.php /composer.json /composer.lock /README.md *.sh
+		path /lib/* /vendor/* /lovable-site/* /tests/* /infra/* /cli/* /config.php /config.sample.php /composer.json /composer.lock /README.md *.sh
 	}
 	@dotfiles path_regexp ^/\.|/\.
 	@uploadscode path_regexp ^/uploads/.*\.(php|phtml|phar|html?|svg)$

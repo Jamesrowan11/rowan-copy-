@@ -12,7 +12,7 @@ DirectoryIndex index.php
 
 RewriteEngine On
 # Block lib/ and vendor/ folders entirely
-RewriteRule ^(lib|vendor|lovable-site|tests|infra)(/|$) - [F,L]
+RewriteRule ^(lib|vendor|lovable-site|tests|infra|cli)(/|$) - [F,L]
 RewriteRule \.sh$ - [F,L]
 # Pretty URLs for customer sites: /s/my-bakery -> site.php?s=my-bakery
 RewriteRule ^s/([a-z0-9-]+)/?$ site.php?s=$1 [L,QSA]
