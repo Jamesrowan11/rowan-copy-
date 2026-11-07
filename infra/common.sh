@@ -48,13 +48,29 @@ mount_nfs() {
 }
 
 # Creates the shared folders (safe to run on every droplet; only the first run changes anything).
+# DigitalOcean's NFS maps root to "nobody" (root squash), so root can't chown on the share.
+# Each folder is therefore created by the user who owns it.
 prepare_shared_folders() {
   say "Preparing shared folders on /srv"
-  mkdir -p /srv/sites /srv/releases /srv/caddy/storage
-  chown "$WEB_UID:$WEB_UID" /srv/sites /srv/releases || die "Could not set owners on /srv. The NFS share may squash root; see infra/README.md."
-  chown -R "$CADDY_UID:$CADDY_UID" /srv/caddy
-  chmod 755 /srv/sites /srv/releases
-  chmod 700 /srv/caddy/storage
+  # Empty folders left by an earlier attempt that ran as root ("nobody") are removed and remade.
+  for d in /srv/caddy/storage /srv/caddy /srv/sites /srv/releases; do
+    if [ -d "$d" ] && [ "$(stat -c %u "$d")" = "65534" ]; then rmdir "$d" 2>/dev/null || true; fi
+  done
+  # The users below must be able to create their folders at the top of the share.
+  if ! sudo -u www-data test -w /srv || ! sudo -u caddy test -w /srv; then
+    chmod 1777 /srv || die "Can't make /srv writable for the web server. Check the NFS share's permissions."
+  fi
+  ensure_owned_dir /srv/sites www-data 755
+  ensure_owned_dir /srv/releases www-data 755
+  ensure_owned_dir /srv/caddy caddy 755
+  ensure_owned_dir /srv/caddy/storage caddy 700
+}
+
+ensure_owned_dir() {
+  local path=$1 user=$2 mode=$3
+  [ -d "$path" ] || sudo -u "$user" mkdir "$path" || die "Could not create $path as $user."
+  [ "$(stat -c %u "$path")" = "$(id -u "$user")" ] || die "$path exists but isn't owned by $user (owner uid $(stat -c %u "$path"))."
+  sudo -u "$user" chmod "$mode" "$path"
 }
 
 install_caddyfile() {
