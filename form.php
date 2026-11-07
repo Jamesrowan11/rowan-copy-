@@ -60,6 +60,14 @@ foreach ($fields as $k => $v) {
     $body .= ucfirst($k) . ": {$v}\n";
 }
 $body .= "\nRead and manage messages: " . base_url('inbox.php?id=' . $site['id']) . "\n";
-send_email($site['owner_email'], 'New message from your website: ' . $site['name'], $body);
+// Replying to the alert goes straight to the visitor, if they gave an email address.
+$visitorEmail = null;
+foreach ($fields as $v) {
+    if (filter_var($v, FILTER_VALIDATE_EMAIL)) {
+        $visitorEmail = (string) $v;
+        break;
+    }
+}
+send_email($site['owner_email'], 'New message from your website: ' . $site['name'], $body, $visitorEmail);
 
 thanks_page('Thank you!', 'Your message was sent. We\'ll be in touch soon.', $back);

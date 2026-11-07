@@ -164,7 +164,7 @@ page_header('Domains');
           </tr>
         <?php endforeach; ?>
       </table></div>
-      <p class="muted small">Prices include registration, yearly renewal, DNS setup, and connecting it to your website and email.</p>
+      <p class="muted small">Prices include registration, yearly renewal, DNS setup, and connecting it to your website<?= hosting()->offersEmail() ? ' and email' : '' ?>.</p>
     <?php endif; ?>
 
     <?php if ($buyQuote && $buyQuote['available']): ?>
@@ -223,7 +223,9 @@ page_header('Domains');
         </tr>
       <?php endforeach; ?>
     </table></div>
+    <?php if (hosting()->offersEmail()): ?>
     <p class="muted small">Manage email accounts and DNS for your domains from your <a href="<?= h(base_url('dashboard.php')) ?>">dashboard</a>.</p>
+    <?php endif; ?>
   <?php endif; ?>
 </div>
 <?php page_footer();

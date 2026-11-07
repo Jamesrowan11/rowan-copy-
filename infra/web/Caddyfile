@@ -1,0 +1,79 @@
+# ============================================================================
+# Rowan Copy: Caddyfile for the 3 web droplets (identical on all of them).
+# setup-web-droplet.sh fills in __ASK_URL__ and __ACME_EMAIL__ and installs
+# this as /etc/caddy/Caddyfile.
+# ============================================================================
+{
+	email __ACME_EMAIL__
+	# Shared on the NFS mount, so all droplets share certificates and coordinate renewals.
+	storage file_system /srv/caddy/storage
+	on_demand_tls {
+		# The builder answers 200 only for live customer domains. Never remove this.
+		ask __ASK_URL__
+	}
+	servers {
+		# A request's Host must match the name its HTTPS connection was opened for,
+		# so a certificate approved for one domain can't be used to reach another folder.
+		strict_sni_host on
+		# To see visitors' real IPs: turn on PROXY protocol on the load balancer, then
+		# uncomment this (both must change together, or every request fails).
+		# listener_wrappers {
+		# 	proxy_protocol {
+		# 		allow 10.0.0.0/8
+		# 	}
+		# 	tls
+		# }
+	}
+}
+
+http:// {
+	# Load balancer health check.
+	handle /health {
+		respond "ok" 200
+	}
+	handle {
+		redir https://{host}{uri} 308
+	}
+}
+
+https:// {
+	tls {
+		on_demand
+	}
+	encode gzip
+
+	# SECURITY: {host} picks the folder below. Only plain domain names may do that.
+	# Without this, "Host: .." resolves to /srv and serves /srv/caddy/storage,
+	# which holds every certificate's private key (tested).
+	@badhost not vars_regexp {host} ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$
+	handle @badhost {
+		respond 404
+	}
+
+	# www.example.com -> example.com (sites are published under the bare domain).
+	@www vars_regexp www {host} ^www\.(.+)$
+	handle @www {
+		redir https://{re.www.1}{uri} 308
+	}
+
+	handle {
+		header {
+			# The same isolation the builder used when it rendered sites itself:
+			# customer pages are AI-generated HTML, so they run sandboxed.
+			Content-Security-Policy "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+			X-Content-Type-Options nosniff
+			Referrer-Policy strict-origin-when-cross-origin
+			-Server
+		}
+		header /rc-media/* Cache-Control "public, max-age=604800"
+		header / Cache-Control "no-cache"
+		root * /srv/sites/{host}
+		file_server {
+			hide .*
+		}
+	}
+
+	handle_errors {
+		respond "This website isn't available." {err.status_code}
+	}
+}

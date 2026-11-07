@@ -1,0 +1,82 @@
+# ============================================================================
+# Rowan Copy: Caddyfile for the builder droplet (the rowancopy.com app).
+# setup-builder-droplet.sh fills in the __PLACEHOLDERS__ and installs this as
+# /etc/caddy/Caddyfile. Mirrors the app's .htaccess (Apache) rules.
+# ============================================================================
+{
+	email __ACME_EMAIL__
+}
+
+www.__APP_DOMAIN__ {
+	redir https://__APP_DOMAIN__{uri} 308
+}
+
+__APP_DOMAIN__ {
+	root * __APP_DIR__
+	encode gzip
+	request_body {
+		max_size 12MB
+	}
+
+	# Never serve private files (code, config, tests, scripts, dotfiles).
+	# These run first inside the route below; Caddy would otherwise run route before respond.
+	@private {
+		path /lib/* /vendor/* /lovable-site/* /tests/* /infra/* /cli/* /config.php /config.sample.php /composer.json /composer.lock /README.md *.sh
+	}
+	@dotfiles path_regexp ^/\.|/\.
+	@uploadscode path_regexp ^/uploads/.*\.(php|phtml|phar|html?|svg)$
+
+	route {
+		respond @private 404
+		respond @dotfiles 404
+		respond @uploadscode 404
+
+		# Old .php addresses of the marketing pages move to the clean ones once the Lovable site is in.
+		@oldphp {
+			path_regexp oldphp ^/(services|work|about|pricing|contact)\.php$
+			file /site/index.html
+		}
+		redir @oldphp /{re.oldphp.1} 301
+
+		# Marketing pages: the Lovable site when installed, otherwise the PHP pages.
+		@mkt_lovable {
+			path_regexp mktl ^/(services|work|about|pricing|contact)/?$
+			file /site/index.html
+		}
+		rewrite @mkt_lovable /site/{re.mktl.1}/index.html
+		@mkt path_regexp mkt ^/(services|work|about|pricing|contact)/?$
+		rewrite @mkt /{re.mkt.1}.php
+		rewrite /static/* /site{path}
+
+		# Customer sites on rowancopy.com/s/slug, referral links, search engines, Caddy check.
+		@slug path_regexp slug ^/s/([a-z0-9-]+)/?$
+		rewrite @slug /site.php?s={re.slug.1}&{query}
+		@ref path_regexp ref ^/r/([A-Za-z0-9]{4,16})/?$
+		rewrite @ref /ref.php?c={re.ref.1}&{query}
+		rewrite /sitemap.xml /sitemap.php
+		rewrite /robots.txt /robots.php
+		rewrite /caddy/domain-check /caddy-domain-check.php?{query}
+
+		# Only real .php files run; unknown addresses are a 404 (not the home page).
+		php_fastcgi unix//run/php/php__PHP_VERSION__-fpm.sock {
+			try_files {path} {path}/index.php =404
+		}
+		file_server {
+			hide .*
+		}
+	}
+}
+
+# The web droplets' Caddy asks this before issuing a certificate. Private network only.
+http://:8080 {
+	bind __PRIVATE_IP__
+	@check path /caddy/domain-check
+	handle @check {
+		root * __APP_DIR__
+		rewrite * /caddy-domain-check.php?{query}
+		php_fastcgi unix//run/php/php__PHP_VERSION__-fpm.sock
+	}
+	handle {
+		respond 404
+	}
+}

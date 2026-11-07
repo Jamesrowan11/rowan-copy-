@@ -90,6 +90,18 @@ As the owner, you get `admin.php`. It shows all customers, sites, visits and thi
 
 Starter **Terms of Service** and **Privacy Policy** pages are at `terms.php` and `privacy.php`. They are templates: fill in the bracketed parts and have a lawyer review them before launch.
 
+## Moving to DigitalOcean (Caddy) and Zoho email
+
+The app can now host customer sites as static files on DigitalOcean behind Caddy, instead of on Plesk.
+It's off until you switch it on: `'hosting' => ['provider' => 'plesk']` keeps everything as it is.
+Setup scripts, Caddy configs, the switch-over outline and the DNS records for Zoho email are in
+[infra/README.md](infra/README.md).
+
+- Outgoing email goes through ZeptoMail when the `ZEPTOMAIL_TOKEN` environment variable is set, and
+  through the server's own mail system otherwise.
+- The config file can live outside the app folder: set `RC_CONFIG` to its path.
+- Tests: `php tests/hosting_test.php` and `php tests/mailer_test.php` (they use temporary files only).
+
 ## Setup on Plesk (Ubuntu)
 
 Replace `rowancopy.com` below with your domain.

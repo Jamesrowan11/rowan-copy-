@@ -422,12 +422,19 @@ function plesk_add_hosted_domain(string $domain): void
  */
 function domain_points_here(string $domain): array
 {
-    $ip = (string) cfg('server_ip');
-    $lookup = function (string $host): array {
-        $recs = @dns_get_record($host, DNS_A);
-        return array_values(array_unique(array_map(fn ($r) => (string) ($r['ip'] ?? ''), is_array($recs) ? $recs : [])));
+    $ip = hosting()->targetIp();
+    $lookup = function (string $host, int $type, string $field): array {
+        $recs = @dns_get_record($host, $type);
+        return array_values(array_unique(array_map(fn ($r) => (string) ($r[$field] ?? ''), is_array($recs) ? $recs : [])));
     };
-    $root = $lookup($domain);
-    $www = $lookup('www.' . $domain);
-    return ['ok' => $ip !== '' && in_array($ip, $root, true), 'root' => $root, 'www' => $www];
+    $root = $lookup($domain, DNS_A, 'ip');
+    $www = $lookup('www.' . $domain, DNS_A, 'ip');
+    // IPv6 records would send some visitors (and Let's Encrypt, which prefers IPv6) somewhere else.
+    $rootV6 = $lookup($domain, DNS_AAAA, 'ipv6');
+    // Every A record must be ours, or some visitors land on the old host.
+    return [
+        'ok' => $ip !== '' && $root === [$ip] && !$rootV6,
+        'www_ok' => $www === [$ip] && !$lookup('www.' . $domain, DNS_AAAA, 'ipv6'),
+        'root' => $root, 'www' => $www, 'root_v6' => $rootV6,
+    ];
 }

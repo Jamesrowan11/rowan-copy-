@@ -63,9 +63,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!password_verify((string) ($_POST['confirm_password'] ?? ''), (string) $stmt->fetchColumn())) {
             $error = 'Enter your password to delete your account.';
         } else {
-            $sites = db()->prepare('SELECT id FROM sites WHERE user_id = ?');
+            $sites = db()->prepare('SELECT id, custom_domain FROM sites WHERE user_id = ?');
             $sites->execute([$user['id']]);
-            foreach ($sites->fetchAll(PDO::FETCH_COLUMN) as $siteId) {
+            foreach ($sites->fetchAll() as $s) {
+                $siteId = (int) $s['id'];
+                remove_site_hosting($s);
                 array_map('unlink', glob(uploads_dir((int) $siteId) . '/*') ?: []);
                 @rmdir(uploads_dir((int) $siteId));
             }

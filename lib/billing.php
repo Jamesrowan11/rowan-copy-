@@ -142,6 +142,9 @@ function sync_subscription(\Stripe\Subscription $sub): void
                        plan_renews_at = ?, plan_cancels = ? WHERE id = ?")
             ->execute([$planKey, $sub->id, $sub->status, $renews ? gmdate('Y-m-d H:i:s', (int) $renews) : null,
                 (int) (bool) $sub->cancel_at_period_end, $user['id']]);
+        if ($planKey !== $user['plan']) {
+            sync_user_hosting((int) $user['id']); // the badge depends on the plan
+        }
         return;
     }
 
@@ -152,5 +155,8 @@ function sync_subscription(\Stripe\Subscription $sub): void
         $source = $user['plan_source'] === 'stripe' ? 'free' : $user['plan_source'];
         db()->prepare('UPDATE users SET plan = ?, plan_source = ?, subscription_status = ?, plan_cancels = 0 WHERE id = ?')
             ->execute([$plan, $source, $sub->status, $user['id']]);
+        if ($plan !== $user['plan']) {
+            sync_user_hosting((int) $user['id']);
+        }
     }
 }

@@ -79,7 +79,7 @@ page_header('Domains (staff)');
   </div>
 
   <h2>Customers' own domains</h2>
-  <p class="muted small">Domains customers bought elsewhere and entered in their site settings. Connect checks their DNS points at <?= h((string) cfg('server_ip') ?: 'your server') ?>, then adds the domain to Plesk.</p>
+  <p class="muted small">Domains customers bought elsewhere and entered in their site settings. Connect checks their DNS points at <?= h(hosting()->targetIp() ?: 'your server') ?>, then puts the site live on it.</p>
   <?php if (!$custom): ?><p class="muted">None yet.</p><?php else: ?>
   <div class="table-wrap"><table>
     <tr><th>Domain</th><th>Site</th><th>Owner</th><th>Status</th><th></th></tr>

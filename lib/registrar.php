@@ -131,18 +131,23 @@ function registrar_renew(string $domain, float $maxPrice): array
 /** Point the domain at Rowan Copy: website (root and www) and email (MX, SPF). */
 function registrar_point_to_server(string $domain): void
 {
-    $ip = (string) cfg('server_ip');
+    $ip = hosting()->targetIp();
     if ($ip === '') {
-        throw new RegistrarError('Set server_ip in config.php so new domains can be pointed at your server.');
+        throw new RegistrarError('Set the server IP (server_ip, or hosting lb_ip on DigitalOcean) in config.php so new domains can be pointed at it.');
     }
     $records = [
         ['host' => '', 'type' => 'A', 'answer' => $ip, 'ttl' => 300],
         ['host' => 'www', 'type' => 'A', 'answer' => $ip, 'ttl' => 300],
-        ['host' => 'mail', 'type' => 'A', 'answer' => $ip, 'ttl' => 300],
-        ['host' => 'webmail', 'type' => 'A', 'answer' => $ip, 'ttl' => 300],
-        ['host' => '', 'type' => 'MX', 'answer' => 'mail.' . $domain, 'priority' => 10, 'ttl' => 300],
-        ['host' => '', 'type' => 'TXT', 'answer' => 'v=spf1 a mx ip4:' . $ip . ' ~all', 'ttl' => 300],
     ];
+    if (hosting()->offersEmail()) {
+        // Email on the same (Plesk) server.
+        array_push($records,
+            ['host' => 'mail', 'type' => 'A', 'answer' => $ip, 'ttl' => 300],
+            ['host' => 'webmail', 'type' => 'A', 'answer' => $ip, 'ttl' => 300],
+            ['host' => '', 'type' => 'MX', 'answer' => 'mail.' . $domain, 'priority' => 10, 'ttl' => 300],
+            ['host' => '', 'type' => 'TXT', 'answer' => 'v=spf1 a mx ip4:' . $ip . ' ~all', 'ttl' => 300],
+        );
+    }
     foreach ($records as $r) {
         registrar_request('POST', '/domains/' . rawurlencode($domain) . '/records', $r);
     }

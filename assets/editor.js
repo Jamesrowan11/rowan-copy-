@@ -294,7 +294,7 @@
       if (r.error) return alert(r.error);
       e.target.domain.value = r.domain;
       $('#domain-help').hidden = !r.domain;
-      if ($('#domain-status')) { $('#domain-status').textContent = 'Not connected yet'; $('#domain-status').className = 'domain-status'; $('#connect-domain').textContent = 'Connect'; }
+      if ($('#domain-status')) { $('#domain-status').textContent = 'Not connected yet'; $('#domain-status').className = 'domain-status'; $('#connect-domain').textContent = 'Check my DNS'; }
       $('#live-link').textContent = r.url;
       $('#live-link').href = r.url;
       alert(r.domain ? 'Domain saved. Point its DNS at us (steps below), then click Connect.' : 'Domain removed.');
