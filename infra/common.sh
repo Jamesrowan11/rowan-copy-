@@ -83,7 +83,10 @@ install_caddyfile() {
     local key=$1 value=$2; shift 2
     sed -i "s#${key}#${value}#g" "$tmp"
   done
-  if grep -q '__[A-Z_]*__' "$tmp"; then die "Unfilled placeholder in $src: $(grep -o '__[A-Z_]*__' "$tmp" | head -1)"; fi
+  # Comment lines may mention placeholders; only real settings must be filled in.
+  if grep -v '^[[:space:]]*#' "$tmp" | grep -q '__[A-Z_]*__'; then
+    die "Unfilled placeholder in $src: $(grep -v '^[[:space:]]*#' "$tmp" | grep -o '__[A-Z_]*__' | head -1)"
+  fi
   caddy validate --adapter caddyfile --config "$tmp" >/dev/null || die "The generated Caddyfile is invalid (see above)."
   [ -f /etc/caddy/Caddyfile ] && cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.bak.$(date +%Y%m%d%H%M%S)"
   install -m 644 "$tmp" /etc/caddy/Caddyfile

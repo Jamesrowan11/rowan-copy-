@@ -1,6 +1,6 @@
 # ============================================================================
 # Rowan Copy: Caddyfile for the builder droplet (the rowancopy.com app).
-# setup-builder-droplet.sh fills in the __PLACEHOLDERS__ and installs this as
+# setup-builder-droplet.sh fills in the placeholders and installs this as
 # /etc/caddy/Caddyfile. Mirrors the app's .htaccess (Apache) rules.
 # ============================================================================
 {
