@@ -22,7 +22,7 @@ source "$here/../common.sh"
 require_root
 require_var NFS_SOURCE
 require_var PRIVATE_IP
-require_var ACME_EMAIL
+ACME_EMAIL=${ACME_EMAIL:-}
 APP_DOMAIN=${APP_DOMAIN:-rowancopy.com}
 APP_DIR=${APP_DIR:-/var/www/rowancopy}
 REPO_URL=${REPO_URL:-https://github.com/Jamesrowan11/rowan-copy-.git}

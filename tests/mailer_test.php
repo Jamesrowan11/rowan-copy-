@@ -59,6 +59,18 @@ putenv('ZEPTOMAIL_API_HOST=evil.example.com');
 putenv('RC_ZEPTOMAIL_TEST_URL');
 check('a non-ZeptoMail API host is refused', !send_email('joe@example.com', 'x', 'y'));
 
+// Token saved on Admin -> Email (secrets.json) instead of an environment variable
+putenv('ZEPTOMAIL_TOKEN');
+putenv('ZEPTOMAIL_API_HOST');
+putenv("RC_ZEPTOMAIL_TEST_URL=http://127.0.0.1:$port/v1.1/email");
+save_secrets(['ZEPTOMAIL_TOKEN' => 'good-token', 'MAIL_FROM' => 'hello@rowancopy.test']);
+check('secrets file is private', (fileperms(secrets_file_path()) & 0777) === 0600);
+check('token from secrets file is used', mail_transport() === 'zeptomail' && send_email('joe@example.com', 'x', 'y'));
+check('sender from secrets file', (end(requests($tmp))['body']['from']['address'] ?? '') === 'hello@rowancopy.test');
+save_secrets(['ZEPTOMAIL_TOKEN' => '']);
+$GLOBALS['RC_CONFIG']['php_mail'] = false;
+check('no token and server mail turned off: email is off', mail_transport() === 'php_mail' && !mail_enabled() && !verification_required());
+
 proc_terminate($server);
 exec('rm -rf ' . escapeshellarg($tmp));
 echo $failed ? "\n$failed FAILED\n" : "\nAll passed\n";

@@ -19,7 +19,7 @@ source "$here/../common.sh"
 require_root
 require_var NFS_SOURCE
 require_var ASK_URL
-require_var ACME_EMAIL
+ACME_EMAIL=${ACME_EMAIL:-}
 
 if systemctl list-unit-files nginx.service >/dev/null 2>&1 && systemctl list-unit-files nginx.service | grep -q nginx; then
   say "Stopping and removing Nginx (Caddy takes over ports 80 and 443)"

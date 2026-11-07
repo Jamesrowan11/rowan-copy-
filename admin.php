@@ -133,7 +133,8 @@ page_header('Admin');
       <a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-inquiries.php')) ?>">Quote requests<?= $newInquiries ? ' <span class="badge badge-msg">' . $newInquiries . ' new</span>' : '' ?></a>
       <a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-hosting.php')) ?>">Hosting (Plesk)</a>
       <a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-domains.php')) ?>">Domains</a>
-      <?php if ($isAdmin): ?><a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-team.php')) ?>">Team</a><?php endif; ?>
+      <?php if ($isAdmin): ?><a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-team.php')) ?>">Team</a>
+      <a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-email.php')) ?>">Email</a><?php endif; ?>
     </div>
   </div>
   <?php if ($resetLink): ?>
@@ -144,7 +145,7 @@ page_header('Admin');
     </div>
   <?php endif; ?>
   <?php if (!mail_enabled()): ?>
-    <div class="notice">Email is off: set <code>mail_from</code> in config.php to send password resets, confirmations and form alerts.</div>
+    <div class="notice">Email is off, so password resets, confirmations and form alerts aren't sent.<?php if ($isAdmin): ?> <a href="<?= h(base_url('admin-email.php')) ?>">Set up email</a>.<?php endif; ?></div>
   <?php endif; ?>
 
   <div class="stats">
