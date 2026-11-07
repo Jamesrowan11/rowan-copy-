@@ -3,6 +3,11 @@
 // Run: php tests/hosting_test.php   (uses a temporary database and folders; touches nothing real)
 declare(strict_types=1);
 
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit;
+}
+
 $tmp = sys_get_temp_dir() . '/rc-hosting-test-' . bin2hex(random_bytes(4));
 mkdir($tmp, 0700, true);
 file_put_contents("$tmp/config.php", '<?php return ' . var_export([
@@ -26,10 +31,13 @@ function check(string $name, bool $ok): void
 $pdo = db();
 $pdo->exec("INSERT INTO users (id, email, name, password_hash) VALUES (1, 'joe@example.com', 'Joe', 'x')");
 $pdo->exec("INSERT INTO sites (id, user_id, name, slug) VALUES (1, 1, 'Joe''s Bakery', 'joes-bakery')");
-$img = ['site_id' => 1, 'filename' => 'abc123.png'];
+// uploads_dir() is the real uploads folder, so use a file name nothing else could have and remove only that.
+$imgName = 'rc-test-' . bin2hex(random_bytes(8)) . '.png';
+$img = ['site_id' => 1, 'filename' => $imgName];
+$uploadsExisted = is_dir(uploads_dir(1));
 @mkdir(uploads_dir(1), 0755, true);
-file_put_contents(uploads_dir(1) . '/abc123.png', 'PNGDATA');
-$pdo->exec("INSERT INTO images (site_id, filename, label) VALUES (1, 'abc123.png', 'logo')");
+file_put_contents(uploads_dir(1) . '/' . $imgName, 'PNGDATA');
+$pdo->prepare("INSERT INTO images (site_id, filename, label) VALUES (1, ?, 'logo')")->execute([$imgName]);
 $html1 = '<html><body><h1>Version one</h1><img src="' . image_url($img) . '"><form action="{{FORM_ACTION}}"></form></body></html>';
 $pdo->prepare("INSERT INTO versions (id, site_id, html, instruction) VALUES (1, 1, ?, 'v1')")->execute([$html1]);
 $pdo->exec("UPDATE sites SET current_version_id = 1, published_version_id = 1, custom_domain = 'joesbakery.com' WHERE id = 1");
@@ -64,8 +72,8 @@ check('page content written', str_contains($page, 'Version one'));
 check('form address filled in', str_contains($page, 'https://rowancopy.test/form.php?s=joes-bakery'));
 check('badge on free plan', str_contains($page, 'Made with Rowan Copy'));
 check('visit counter added', str_contains($page, 'https://rowancopy.test/v.php?s=joes-bakery'));
-check('image copied', @file_get_contents("$live/rc-media/abc123.png") === 'PNGDATA');
-check('image address rewritten', str_contains($page, 'src="/rc-media/abc123.png"') && !str_contains($page, '/uploads/'));
+check('image copied', @file_get_contents("$live/rc-media/$imgName") === 'PNGDATA');
+check('image address rewritten', str_contains($page, 'src="/rc-media/' . $imgName . '"') && !str_contains($page, '/uploads/'));
 $first = readlink($live);
 
 $pdo->prepare("INSERT INTO versions (id, site_id, html, instruction) VALUES (2, 1, ?, 'v2')")->execute([str_replace('Version one', 'Version two', $html1)]);
@@ -119,8 +127,10 @@ foreach (['../../etc', '..', 'a/b.com'] as $bad) {
 }
 
 // Clean up
-array_map('unlink', glob(uploads_dir(1) . '/*') ?: []);
-@rmdir(uploads_dir(1));
+@unlink(uploads_dir(1) . '/' . $imgName);
+if (!$uploadsExisted) {
+    @rmdir(uploads_dir(1));
+}
 exec('rm -rf ' . escapeshellarg($tmp));
 echo $failed ? "\n$failed FAILED\n" : "\nAll passed\n";
 exit($failed ? 1 : 0);
