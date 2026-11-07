@@ -91,7 +91,7 @@ function save_inquiry(array $v): array
         ->execute([$v['name'], $v['business'], strtolower($v['email']), $v['phone'], $v['service'], $v['budget'], $v['message'], client_ip()]);
     send_email($c['email'], "New quote request: {$v['service']} from {$v['name']}",
         "Name: {$v['name']}\nBusiness: {$v['business']}\nEmail: {$v['email']}\nPhone: {$v['phone']}\nService: {$v['service']}\nBudget: {$v['budget']}\n\n{$v['message']}\n\n"
-        . 'See all requests: ' . base_url('admin-inquiries.php') . "\n");
+        . 'See all requests: ' . base_url('admin-inquiries.php') . "\n", $v['email']);
     send_email($v['email'], "We got your request, {$v['name']}",
         "Hi {$v['name']},\n\nThanks for reaching out to {$c['name']}. We received your request for {$v['service']} and will reply within one business day with a quote, a timeline, and any questions.\n\n"
         . "If you'd like to get started on a website right away, you can build one yourself here: " . base_url('register.php') . "\n\n{$c['owner']}\n{$c['name']}\n{$c['email']}\n");

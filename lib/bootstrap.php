@@ -23,6 +23,7 @@ require_once __DIR__ . '/referrals.php';
 require_once __DIR__ . '/registrar.php';
 require_once __DIR__ . '/domains.php';
 require_once __DIR__ . '/hosting.php';
+require_once __DIR__ . '/mailer.php';
 require_once RC_ROOT . '/vendor/autoload.php';
 
 function cfg(string $key, mixed $default = null): mixed
@@ -347,37 +348,6 @@ function log_in(int $userId): void
 // ---------------------------------------------------------------------------
 // Email
 // ---------------------------------------------------------------------------
-
-function mail_from(): string
-{
-    return (string) (cfg('mail_from') ?: cfg('notify_email_from', ''));
-}
-
-function mail_enabled(): bool
-{
-    return filter_var(mail_from(), FILTER_VALIDATE_EMAIL) !== false;
-}
-
-/** Send a plain-text email through the server's mail system. Returns false if email isn't set up. */
-function send_email(string $to, string $subject, string $body): bool
-{
-    if (!mail_enabled() || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
-        return false;
-    }
-    $from = mail_from();
-    $subject = mb_encode_mimeheader(preg_replace('/[\r\n]+/', ' ', $subject) ?? '', 'UTF-8');
-    $headers = implode("\r\n", [
-        'From: Rowan Copy <' . $from . '>',
-        'MIME-Version: 1.0',
-        'Content-Type: text/plain; charset=UTF-8',
-        'Content-Transfer-Encoding: 8bit',
-    ]);
-    $ok = @mail($to, $subject, $body, $headers, '-f' . $from);
-    if (!$ok) {
-        error_log("Rowan Copy: could not send email to $to");
-    }
-    return $ok;
-}
 
 /** Whether customers must confirm their email before publishing. Off when email isn't set up. */
 function verification_required(): bool

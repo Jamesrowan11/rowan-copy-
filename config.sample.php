@@ -121,8 +121,10 @@ return [
 
     // --- Email -----------------------------------------------------------------
     // The address Rowan Copy sends from: password resets, email confirmations and
-    // new-message alerts. Use an address on your own domain (e.g. noreply@rowancopy.com)
-    // that exists in Plesk -> Mail. Leave empty to turn all email off.
+    // new-message alerts. Use an address on your own domain (e.g. noreply@rowancopy.com).
+    // Leave empty to turn all email off. The MAIL_FROM environment variable overrides it.
+    // Email goes through ZeptoMail when the ZEPTOMAIL_TOKEN environment variable is set
+    // (never put the token in this file), otherwise through the server's own mail system.
     'mail_from' => '',
 
     // Require customers to confirm their email before they can publish a site.
@@ -146,6 +148,18 @@ return [
 
     // Your server's public IP address. Shown to customers connecting their own domain.
     'server_ip' => '',
+
+    // Where customer sites with their own domain are hosted. See infra/README.md.
+    //   'plesk': today's Plesk server (sites rendered live by this app; uses server_ip).
+    //   'files': DigitalOcean + Caddy. Sites are published as files to sites_root on the
+    //            shared NFS mount, and customers point their domain at lb_ip.
+    // The RC_HOSTING_PROVIDER environment variable overrides 'provider'.
+    'hosting' => [
+        'provider'      => 'plesk',
+        'sites_root'    => '/srv/sites',
+        'releases_root' => '/srv/releases',
+        'lb_ip'         => '', // the DigitalOcean load balancer's IP
+    ],
 
     // Owner accounts: always admins, and can never be removed from the team.
     // Add other admins and employees on Admin -> Team instead of here.
