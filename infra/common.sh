@@ -58,6 +58,8 @@ install_caddyfile() {
   local src=$1; shift
   local tmp; tmp=$(mktemp)
   cp "$src" "$tmp"
+  # The Let's Encrypt contact address is optional.
+  [ -n "${ACME_EMAIL:-}" ] || sed -i '/email __ACME_EMAIL__/d' "$tmp"
   while [ $# -gt 0 ]; do
     local key=$1 value=$2; shift 2
     sed -i "s#${key}#${value}#g" "$tmp"
