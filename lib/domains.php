@@ -127,24 +127,21 @@ function finish_domain_setup(int $orderId): void
     $domain = $order['domain'];
     try {
         registrar_point_to_server($domain);
-        plesk_add_hosted_domain($domain);
-        // Let the customer manage its email accounts and DNS in their portal.
-        $siteIdPlesk = plesk_find_domain($domain);
-        if ($siteIdPlesk) {
-            db()->prepare('INSERT INTO hosting_domains (user_id, domain, plesk_site_id) VALUES (?, ?, ?)
-                ON CONFLICT(domain) DO UPDATE SET user_id = excluded.user_id, plesk_site_id = excluded.plesk_site_id')
-                ->execute([$user['id'], $domain, $siteIdPlesk]);
-        }
+        // On Plesk this also lets the customer manage the domain's email accounts in their portal.
+        hosting()->addDomain($domain, (int) $user['id'], true);
         // Show their website on it.
         if ($order['site_id']) {
             db()->prepare('UPDATE sites SET custom_domain = ?, domain_connected_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?')
                 ->execute([$domain, $order['site_id'], $user['id']]);
+            if ($err = sync_site_hosting((int) $order['site_id'])) {
+                throw new HostingError($err);
+            }
         }
         set_order($orderId, ['status' => 'active', 'error' => null]);
         send_email($user['email'], "$domain is yours",
             "Hi {$user['name']},\n\nYour new domain $domain is registered and being set up. Over the next hour or so it will start showing your website"
             . ($order['site_id'] ? '' : ' (connect it to a website from the editor\'s Settings)') . ", with a secure https certificate shortly after.\n\n"
-            . "You can create email addresses like you@$domain from your portal: " . base_url('dashboard.php') . "\n\n"
+            . (hosting()->offersEmail() ? "You can create email addresses like you@$domain from your portal: " . base_url('dashboard.php') . "\n\n" : '')
             . 'It renews automatically every year; you can turn that off any time on the Domains page: ' . base_url('domains.php') . "\n\n- Rowan Copy\n");
     } catch (Throwable $e) {
         set_order($orderId, ['status' => 'setup_failed', 'error' => $e->getMessage()]);
@@ -222,34 +219,38 @@ function connect_custom_domain(array $site): array
     if ($domain === '') {
         return ['ok' => false, 'message' => 'Add a domain first.'];
     }
+    $domain = site_host($domain);
+    $ip = hosting()->targetIp();
     $dns = domain_points_here($domain);
     if (!$dns['ok']) {
+        if ($dns['root_v6']) {
+            return ['ok' => false, 'message' => "$domain has an AAAA (IPv6) record pointing to " . implode(', ', $dns['root_v6'])
+                . '. Delete the AAAA records for @ and www, otherwise some visitors and the security certificate would go to the wrong place.'];
+        }
         $now = $dns['root'] ? 'It currently points to ' . implode(', ', $dns['root']) . '.' : 'It doesn\'t point anywhere yet.';
-        return ['ok' => false, 'message' => "$domain doesn't point to our server yet. $now Set an A record for @ and www to "
-            . cfg('server_ip') . '. DNS changes can take up to a few hours.'];
+        return ['ok' => false, 'message' => "$domain doesn't point to us yet. $now Set an A record for @ and for www to $ip, "
+            . 'and delete any other A records for them. DNS changes can take up to a few hours.'];
     }
-    // Domains bought through Rowan Copy are already set up in Plesk as their own domain.
-    $bought = db()->prepare("SELECT 1 FROM domain_orders WHERE domain = ? AND status IN ('active', 'registered')");
-    $bought->execute([$domain]);
-    if (!$bought->fetchColumn()) {
-        plesk_add_site_alias($domain);
+    // Domains bought through Rowan Copy were already added when they were set up.
+    if (!domain_was_bought($domain)) {
+        hosting()->addDomain($domain, (int) $site['user_id'], false);
     }
     db()->prepare('UPDATE sites SET domain_connected_at = CURRENT_TIMESTAMP WHERE id = ?')->execute([$site['id']]);
-    return ['ok' => true, 'message' => "$domain is connected. The secure (https) certificate usually follows within the hour."];
+    if ($err = sync_site_hosting((int) $site['id'])) {
+        return ['ok' => false, 'message' => "Your DNS is set up correctly, but $err"];
+    }
+    $www = $dns['www_ok'] ? '' : " Tip: also point www.$domain to $ip so the www address works too.";
+    return ['ok' => true, 'message' => "$domain is connected. The secure (https) certificate is created on the first visit.$www"];
 }
 
 function disconnect_custom_domain(array $site): void
 {
     $domain = (string) $site['custom_domain'];
     if ($domain !== '' && $site['domain_connected_at']) {
-        $bought = db()->prepare("SELECT 1 FROM domain_orders WHERE domain = ? AND status IN ('active', 'registered')");
-        $bought->execute([$domain]);
-        if (!$bought->fetchColumn()) {
-            try {
-                plesk_remove_site_alias($domain);
-            } catch (PleskError $e) {
-                error_log('Rowan Copy: could not remove alias ' . $domain . ': ' . $e->getMessage());
-            }
+        try {
+            hosting()->removeDomain(site_host($domain), domain_was_bought($domain));
+        } catch (Throwable $e) {
+            error_log('Rowan Copy: could not disconnect ' . $domain . ': ' . $e->getMessage());
         }
     }
     db()->prepare('UPDATE sites SET domain_connected_at = NULL WHERE id = ?')->execute([$site['id']]);

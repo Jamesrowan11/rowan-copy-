@@ -36,10 +36,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $pdo->prepare('UPDATE users SET suspended = 1 WHERE id = ?')->execute([$uid]);
             bump_session_version($uid);
+            sync_user_hosting($uid);
             flash('Customer suspended. They are logged out and their sites are offline.');
             break;
         case 'unsuspend':
             $pdo->prepare('UPDATE users SET suspended = 0 WHERE id = ?')->execute([$uid]);
+            sync_user_hosting($uid);
             flash('Customer restored.');
             break;
         case 'set_limit':
@@ -53,6 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (isset(plans()[$plan])) {
                 $pdo->prepare('UPDATE users SET plan = ?, plan_source = ? WHERE id = ?')
                     ->execute([$plan, $plan === 'free' ? 'free' : 'manual', $uid]);
+                sync_user_hosting($uid); // the "Made with Rowan Copy" badge depends on the plan
                 flash('Plan set to ' . plans()[$plan]['name'] . '. Stripe won\'t charge for a plan you set here.');
             }
             break;
@@ -65,10 +68,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
         case 'takedown':
             $pdo->prepare('UPDATE sites SET taken_down = 1 WHERE id = ?')->execute([$sid]);
+            sync_site_hosting($sid);
             flash('Site taken down.');
             break;
         case 'restore_site':
             $pdo->prepare('UPDATE sites SET taken_down = 0 WHERE id = ?')->execute([$sid]);
+            sync_site_hosting($sid);
             flash('Site restored.');
             break;
     }

@@ -142,15 +142,21 @@ page_header('Editing ' . $site['name'], 'editor-page');
         <button class="btn btn-sm">Save domain</button>
       </form>
       <div id="domain-help" class="muted small" <?= $site['custom_domain'] ? '' : 'hidden' ?>>
-        <p><strong>Next steps:</strong> at the company where you bought the domain, open its DNS settings and
-        <?php if (cfg('server_ip')): ?>
-          add an <strong>A record</strong> for <code>@</code> and for <code>www</code> pointing to <code><?= h((string) cfg('server_ip')) ?></code>.
+        <?php $targetIp = hosting()->targetIp(); ?>
+        <?php if ($targetIp !== ''): ?>
+          <p><strong>Next steps:</strong> at the company where you bought the domain, open its DNS settings and create these two records:</p>
+          <div class="table-wrap"><table class="dns-steps">
+            <tr><th>Type</th><th>Host / Name</th><th>Value / Points to</th></tr>
+            <tr><td>A</td><td><code>@</code></td><td><code><?= h($targetIp) ?></code></td></tr>
+            <tr><td>A</td><td><code>www</code></td><td><code><?= h($targetIp) ?></code></td></tr>
+          </table></div>
+          <p>Delete any other <strong>A</strong> or <strong>AAAA</strong> records for <code>@</code> and <code>www</code>.
+          Then click <strong>Check my DNS</strong>. Changes can take a few hours to reach everyone; your site goes live on the domain once the check passes.</p>
         <?php else: ?>
-          add a <strong>CNAME record</strong> for <code>www</code> pointing to <code><?= h($appHost) ?></code>.
+          <p><strong>Next steps:</strong> contact us and we'll send you the DNS settings for your domain.</p>
         <?php endif; ?>
-        Then click <strong>Connect</strong>. DNS changes can take a few hours to reach everyone.</p>
         <p id="domain-status" class="domain-status <?= $site['domain_connected_at'] ? 'ok' : '' ?>"><?= $site['domain_connected_at'] ? '✓ Connected' : 'Not connected yet' ?></p>
-        <button type="button" id="connect-domain" class="btn btn-sm"><?= $site['domain_connected_at'] ? 'Check again' : 'Connect' ?></button>
+        <button type="button" id="connect-domain" class="btn btn-sm"><?= $site['domain_connected_at'] ? 'Check again' : 'Check my DNS' ?></button>
       </div>
       <p class="muted small">Don't have a domain yet? <a href="<?= h(base_url('domains.php')) ?>">Find one</a></p>
       <hr>

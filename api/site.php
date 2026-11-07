@@ -32,10 +32,16 @@ switch ($_POST['action'] ?? '') {
         }
         $pdo->prepare('UPDATE sites SET published_version_id = current_version_id, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
             ->execute([$siteId]);
+        if ($err = sync_site_hosting($siteId)) {
+            json_out(['error' => 'Published, but ' . lcfirst($err)], 502);
+        }
         json_out(['ok' => true, 'url' => public_url($site), 'published_version_id' => (int) $site['current_version_id']]);
 
     case 'unpublish':
         $pdo->prepare('UPDATE sites SET published_version_id = NULL WHERE id = ?')->execute([$siteId]);
+        if ($err = sync_site_hosting($siteId)) {
+            json_out(['error' => $err], 502);
+        }
         json_out(['ok' => true]);
 
     case 'restore':
@@ -66,6 +72,9 @@ switch ($_POST['action'] ?? '') {
         }
         $pdo->prepare('UPDATE sites SET name = ?, slug = ?, brief = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
             ->execute([$name, $slug, $brief !== '' ? $brief : $site['brief'], $siteId]);
+        if ($slug !== $site['slug']) {
+            sync_site_hosting($siteId); // the contact form address includes the slug
+        }
         json_out(['ok' => true, 'url' => public_url(['slug' => $slug] + $site)]);
 
     case 'domain':
@@ -73,7 +82,8 @@ switch ($_POST['action'] ?? '') {
         if ($raw !== '' && !plan_feature($user, 'custom_domain')) {
             json_out(['error' => 'Connecting your own domain is part of our paid plans. See the Billing page to upgrade.'], 403);
         }
-        $domain = $raw === '' ? '' : normalize_domain($raw);
+        // Always stored without www.; www.example.com redirects to example.com.
+        $domain = $raw === '' ? '' : site_host(normalize_domain($raw));
         if ($raw !== '' && $domain === '') {
             json_out(['error' => 'That doesn\'t look like a domain name. Enter something like mybakery.com.'], 422);
         }
@@ -99,7 +109,7 @@ switch ($_POST['action'] ?? '') {
         }
         try {
             $r = connect_custom_domain($site);
-        } catch (PleskError $e) {
+        } catch (PleskError|HostingError $e) {
             error_log('Rowan Copy connect domain: ' . $e->getMessage());
             json_out(['error' => 'Your DNS is set up correctly, but we couldn\'t finish connecting it. Our team has been notified.'], 500);
         }
@@ -161,6 +171,7 @@ switch ($_POST['action'] ?? '') {
         json_out(['ok' => true, 'url' => base_url('editor.php?id=' . $newId)]);
 
     case 'delete':
+        remove_site_hosting($site);
         array_map('unlink', glob(uploads_dir($siteId) . '/*') ?: []);
         @rmdir(uploads_dir($siteId));
         $pdo->prepare('DELETE FROM sites WHERE id = ?')->execute([$siteId]);
