@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Shared helpers for the Rowan Copy droplet setup scripts. Sourced, not run.
 set -euo pipefail
+# First-boot scripts (cloud-init) run without HOME, and Composer refuses to run without it.
+export HOME=${HOME:-/root}
+export COMPOSER_HOME=${COMPOSER_HOME:-$HOME/.composer}
 
 # Same user/group IDs on every droplet, so files on the shared NFS mount have
 # the same owners everywhere (Caddy's certificates are written by "caddy").
