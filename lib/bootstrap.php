@@ -9,7 +9,8 @@ declare(strict_types=1);
 
 const RC_ROOT = __DIR__ . '/..';
 
-$configFile = RC_ROOT . '/config.php';
+// The config (with its secrets) can live outside the web folder: set RC_CONFIG to its path.
+$configFile = getenv('RC_CONFIG') ?: RC_ROOT . '/config.php';
 if (!is_file($configFile)) {
     http_response_code(500);
     exit('Rowan Copy is not configured yet. Copy config.sample.php to config.php and fill it in.');
@@ -21,6 +22,7 @@ require_once __DIR__ . '/plesk.php';
 require_once __DIR__ . '/referrals.php';
 require_once __DIR__ . '/registrar.php';
 require_once __DIR__ . '/domains.php';
+require_once __DIR__ . '/hosting.php';
 require_once RC_ROOT . '/vendor/autoload.php';
 
 function cfg(string $key, mixed $default = null): mixed
@@ -616,27 +618,74 @@ function serve_site(?array $site): never
         exit;
     }
 
-    // Count real visits (skip bots and link previews). No cookies, no personal data.
-    $ua = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
-    if ($ua !== '' && !preg_match('/bot|crawl|spider|slurp|preview|facebookexternalhit|curl|wget|python|monitor/i', $ua)) {
-        db()->prepare('INSERT INTO page_views (site_id, day, views) VALUES (?, date(\'now\'), 1)
-                       ON CONFLICT(site_id, day) DO UPDATE SET views = views + 1')->execute([$site['id']]);
-    }
-
-    $html = render_site_html($site['html'], $site);
-    if (cfg('show_badge', true) && empty(user_plan(['plan' => $site['owner_plan'] ?? 'free'])['remove_badge'])) {
-        $badge = '<a href="' . h(base_url()) . '" target="_blank" rel="noopener" style="position:fixed;right:12px;bottom:12px;z-index:2147483647;'
-            . 'background:#14233f;color:#fff;font:600 12px/1 system-ui,sans-serif;padding:8px 12px;border-radius:999px;text-decoration:none;'
-            . 'box-shadow:0 2px 8px rgba(0,0,0,.2)">Made with Rowan Copy</a>';
-        $pos = strripos($html, '</body>');
-        $html = $pos === false ? $html . $badge : substr_replace($html, $badge, $pos, 0);
-    }
+    count_site_view((int) $site['id']);
+    $html = build_site_page($site, false);
 
     header('Content-Type: text/html; charset=utf-8');
     header('Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
     header('Cache-Control: no-cache');
     echo $html;
     exit;
+}
+
+/** A customer's domain without a leading www. Sites are always stored and published under this name. */
+function site_host(string $domain): string
+{
+    return (string) preg_replace('/^www\./', '', strtolower($domain));
+}
+
+/**
+ * Whether a domain (or its www. form) belongs to a live customer site whose DNS
+ * we've checked: published, not taken down, owner not suspended, domain connected.
+ * This is the security check that decides whether Caddy may get a certificate.
+ */
+function domain_is_active(string $domain): bool
+{
+    $d = strtolower($domain);
+    if (strlen($d) > 253 || !preg_match('/^[a-z0-9.-]+$/', $d) || normalize_domain($d) !== $d) {
+        return false;
+    }
+    $stmt = db()->prepare('SELECT 1 FROM sites s JOIN users u ON u.id = s.user_id
+        WHERE s.custom_domain IN (?, ?) AND s.published_version_id IS NOT NULL AND s.taken_down = 0
+          AND u.suspended = 0 AND s.domain_connected_at IS NOT NULL LIMIT 1');
+    $stmt->execute([site_host($d), 'www.' . site_host($d)]);
+    return (bool) $stmt->fetchColumn();
+}
+
+/** Count a real visit (skips bots and link previews). No cookies, no personal data. */
+function count_site_view(int $siteId): void
+{
+    $ua = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
+    if ($ua !== '' && !preg_match('/bot|crawl|spider|slurp|preview|facebookexternalhit|curl|wget|python|monitor/i', $ua)) {
+        db()->prepare('INSERT INTO page_views (site_id, day, views) VALUES (?, date(\'now\'), 1)
+                       ON CONFLICT(site_id, day) DO UPDATE SET views = views + 1')->execute([$siteId]);
+    }
+}
+
+/**
+ * The finished page for a published site: form address filled in, plus the
+ * "Made with Rowan Copy" badge on plans that show it. $static: the page will be
+ * served as a file from the customer's domain, so it gets a tiny visit counter
+ * that calls back to this app (index.php counts visits itself when rendering live).
+ */
+function build_site_page(array $site, bool $static): string
+{
+    $html = render_site_html((string) $site['html'], $site);
+    $extra = '';
+    if (cfg('show_badge', true) && empty(user_plan(['plan' => $site['owner_plan'] ?? 'free'])['remove_badge'])) {
+        $extra .= '<a href="' . h(base_url()) . '" target="_blank" rel="noopener" style="position:fixed;right:12px;bottom:12px;z-index:2147483647;'
+            . 'background:#14233f;color:#fff;font:600 12px/1 system-ui,sans-serif;padding:8px 12px;border-radius:999px;text-decoration:none;'
+            . 'box-shadow:0 2px 8px rgba(0,0,0,.2)">Made with Rowan Copy</a>';
+    }
+    if ($static) {
+        $extra .= '<img src="' . h(base_url('v.php?s=' . rawurlencode((string) $site['slug']))) . '" alt="" width="1" height="1" '
+            . 'style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" referrerpolicy="origin">';
+    }
+    if ($extra === '') {
+        return $html;
+    }
+    $pos = strripos($html, '</body>');
+    return $pos === false ? $html . $extra : substr_replace($html, $extra, $pos, 0);
 }
 
 const SITE_SERVE_SQL = 'SELECT s.*, v.html, u.suspended AS owner_suspended, u.plan AS owner_plan FROM sites s
