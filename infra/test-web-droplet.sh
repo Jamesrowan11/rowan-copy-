@@ -21,7 +21,10 @@ csp=$(c -D - -o /dev/null "https://$domain/" | grep -ci '^content-security-polic
 expect "sandbox header present" 1 "$csp"
 expect "www redirects to bare domain" 308 "$(c -o /dev/null -w '%{http_code}' "https://www.$domain/")"
 # The important ones: nothing outside the site's own folder is reachable.
-expect "Host '..' can't reach certificate storage" 421 "$(c -o /dev/null -w '%{http_code}' -H 'Host: ..' "https://$domain/caddy/storage/")"
+# Newer Caddy rejects this Host outright (400); with strict_sni_host it's 421. Either way nothing is served.
+code=$(c -o /dev/null -w '%{http_code}' -H 'Host: ..' "https://$domain/caddy/storage/")
+case "$code" in 400|421) code=blocked ;; esac
+expect "Host '..' can't reach certificate storage" blocked "$code"
 expect "another Host over this domain's connection is refused" 421 "$(c -o /dev/null -w '%{http_code}' -H 'Host: example.com' "https://$domain/")"
 code=$(c -o /dev/null -w '%{http_code}' "https://$bogus/" 2>/dev/null)
 expect "no certificate for an unapproved domain" 000 "$code"
