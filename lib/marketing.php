@@ -87,6 +87,8 @@ function save_inquiry(array $v): array
         return $errors;
     }
     $c = company();
+    crm_queue_lead(crm_lead_record($v['name'], $v['email'],
+        "Quote request from rowancopy.com\nService: {$v['service']}\nBudget: {$v['budget']}\n\n{$v['message']}", $v['business'], $v['phone']));
     db()->prepare('INSERT INTO inquiries (name, business, email, phone, service, budget, message, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
         ->execute([$v['name'], $v['business'], strtolower($v['email']), $v['phone'], $v['service'], $v['budget'], $v['message'], client_ip()]);
     send_email($c['email'], "New quote request: {$v['service']} from {$v['name']}",

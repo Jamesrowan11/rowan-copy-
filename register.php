@@ -36,6 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $newId = (int) db()->lastInsertId();
             log_in($newId);
             record_referral($newId, $email, incoming_referral_code());
+            crm_queue_lead(crm_lead_record($name, $email, 'Created a Rowan Copy account (website builder sign-up) on ' . gmdate('Y-m-d') . '.'));
             if (verification_required()) {
                 send_verification_email(['id' => $newId, 'name' => $name, 'email' => $email]);
                 flash('Welcome to Rowan Copy! We sent a confirmation link to ' . $email . '. Let\'s build your first website.');
