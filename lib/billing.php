@@ -105,9 +105,13 @@ function max_mailboxes(array $user): int
 /** Email accounts this customer has across every domain linked to them. */
 function count_user_mailboxes(int $userId): int
 {
-    $n = 0;
-    foreach (user_hosting_domains($userId) as $d) {
-        $n += count(plesk_list_mailboxes((int) $d['plesk_site_id']));
+    $stmt = db()->prepare('SELECT COUNT(*) FROM mail_accounts WHERE user_id = ?');
+    $stmt->execute([$userId]);
+    $n = (int) $stmt->fetchColumn();
+    if (plesk_enabled()) { // older mailboxes still on Plesk
+        foreach (user_hosting_domains($userId) as $d) {
+            $n += count(plesk_list_mailboxes((int) $d['plesk_site_id']));
+        }
     }
     return $n;
 }

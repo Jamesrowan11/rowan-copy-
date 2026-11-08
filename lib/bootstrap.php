@@ -25,6 +25,7 @@ require_once __DIR__ . '/domains.php';
 require_once __DIR__ . '/hosting.php';
 require_once __DIR__ . '/mailer.php';
 require_once __DIR__ . '/zoho.php';
+require_once __DIR__ . '/zohomail.php';
 require_once RC_ROOT . '/vendor/autoload.php';
 
 function cfg(string $key, mixed $default = null): mixed
@@ -220,6 +221,30 @@ function migrate(PDO $pdo): void
         zoho_id TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         sent_at TEXT
+    )');
+    // Zoho Mail domains and mailboxes created through the portal (see lib/zohomail.php).
+    $pdo->exec('CREATE TABLE IF NOT EXISTS mail_domains (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        domain TEXT NOT NULL UNIQUE,
+        verify_code TEXT NOT NULL DEFAULT \'\',
+        verified INTEGER NOT NULL DEFAULT 0,
+        mx_ok INTEGER NOT NULL DEFAULT 0,
+        spf_ok INTEGER NOT NULL DEFAULT 0,
+        dkim_ok INTEGER NOT NULL DEFAULT 0,
+        dkim_selector TEXT,
+        dkim_id TEXT,
+        dkim_value TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )');
+    $pdo->exec('CREATE TABLE IF NOT EXISTS mail_accounts (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        mail_domain_id INTEGER NOT NULL REFERENCES mail_domains(id) ON DELETE CASCADE,
+        email TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL DEFAULT \'\',
+        zuid TEXT NOT NULL DEFAULT \'\',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )');
 }
 

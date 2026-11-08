@@ -374,3 +374,10 @@ a.m-card:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(20,35
 .domain-status { font-weight: 600; margin: 10px 0 8px; }
 .domain-status.ok { color: var(--ok); }
 .domain-status.err { color: var(--err); font-weight: 500; }
+
+/* Email page */
+.mailbox-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 0; border-bottom: 1px solid var(--line, #e5e5e5); }
+.mailbox-row form.inline { display: inline-flex; gap: 6px; align-items: center; }
+.mailbox-row input[type=password] { width: 12em; margin: 0; }
+.mailbox-new { margin-top: 14px; }
+code.wrap { word-break: break-all; white-space: normal; }

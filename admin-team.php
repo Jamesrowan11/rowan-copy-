@@ -6,11 +6,14 @@ require __DIR__ . '/lib/layout.php';
 $user = require_admin();
 $inviteLink = null;
 
-/** The Plesk site id of the main Rowan Copy domain, for staff email accounts. */
+/** The main Rowan Copy domain for staff email, and how mailboxes are made there ('zoho', a Plesk site id, or null). */
 function main_mail_domain(): array
 {
     $host = strtolower((string) (cfg('mail_domain') ?: parse_url((string) cfg('base_url'), PHP_URL_HOST)));
     $host = preg_replace('/^(www|app|portal)\./', '', $host) ?? $host;
+    if (zoho_mail_enabled()) {
+        return [$host, 'zoho'];
+    }
     return [$host, plesk_enabled() ? plesk_find_domain($host) : null];
 }
 
@@ -34,13 +37,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($mailLocal !== '') {
                     [$mainDomain, $mainSite] = main_mail_domain();
                     if (!$mainSite) {
-                        throw new RuntimeException("Can't create the email account: $mainDomain isn't connected through Plesk.");
+                        throw new RuntimeException("Can't create the email account: connect Zoho Mail on Admin -> Integrations first.");
                     }
                     $pw = (string) ($_POST['mail_password'] ?? '');
                     if (strlen($pw) < 10) {
                         throw new RuntimeException('Give the new email account a password of at least 10 characters.');
                     }
-                    plesk_create_mailbox($mainSite, $mailLocal, $pw);
+                    if ($mainSite === 'zoho') {
+                        if (!preg_match('/^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/', $mailLocal)) {
+                            throw new RuntimeException('Use only letters, numbers, dots, dashes and underscores before the @.');
+                        }
+                        zmail_create_account("$mailLocal@$mainDomain", $pw, $name);
+                    } else {
+                        plesk_create_mailbox((int) $mainSite, $mailLocal, $pw);
+                    }
                     $mailNote = " Created the email account {$mailLocal}@{$mainDomain}.";
                 }
 
@@ -95,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $team = db()->query("SELECT id, name, email, role, created_at FROM users ORDER BY name")->fetchAll();
 $team = array_values(array_filter($team, fn ($u) => user_role($u) !== 'customer'));
-[$mainDomain, $mainSite] = plesk_enabled() ? main_mail_domain() : ['', null];
+[$mainDomain, $mainSite] = main_mail_domain();
 
 page_header('Team');
 ?>
@@ -150,7 +160,9 @@ page_header('Team');
           <legend>Also create a <?= h($mainDomain) ?> email account (optional)</legend>
           <label>Address <span class="addr"><input name="mailbox" maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9._\-]*" placeholder="jane"><span>@<?= h($mainDomain) ?></span></span></label>
           <label>Email password <input type="password" name="mail_password" minlength="10" autocomplete="new-password"></label>
-          <p class="muted small">Leave the address empty to skip. Their email works in webmail at webmail.<?= h($mainDomain) ?> and in any email app.</p>
+          <p class="muted small">Leave the address empty to skip. <?= $mainSite === 'zoho'
+            ? 'They read it at ' . h(parse_url(zoho_mail_webmail_url(), PHP_URL_HOST)) . ' or in the Zoho Mail app.'
+            : 'Their email works in webmail at webmail.' . h($mainDomain) . ' and in any email app.' ?></p>
         </fieldset>
       <?php endif; ?>
       <button class="btn">Add to team</button>

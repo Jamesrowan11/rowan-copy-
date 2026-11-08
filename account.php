@@ -71,6 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 array_map('unlink', glob(uploads_dir((int) $siteId) . '/*') ?: []);
                 @rmdir(uploads_dir((int) $siteId));
             }
+            mail_cleanup_user((int) $user['id']); // their Zoho mailboxes and domains
             db()->prepare('DELETE FROM users WHERE id = ?')->execute([$user['id']]);
             $_SESSION = [];
             session_destroy();
