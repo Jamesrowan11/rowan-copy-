@@ -45,6 +45,7 @@ function page_header(string $title, string $bodyClass = '', string $description 
     <?php if ($user): ?>
       <a href="<?= h(base_url('dashboard.php')) ?>">My account</a>
       <a href="<?= h(base_url('domains.php')) ?>">Domains</a>
+      <?php if (zoho_mail_enabled()): ?><a href="<?= h(base_url('email.php')) ?>">Email</a><?php endif; ?>
       <a href="<?= h(base_url('billing.php')) ?>">Billing</a>
       <?php if (referrals_enabled()): ?><a href="<?= h(base_url('referrals.php')) ?>">Refer a friend</a><?php endif; ?>
       <a href="<?= h(base_url('account.php')) ?>">Settings</a>

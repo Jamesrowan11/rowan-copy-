@@ -21,7 +21,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new ZohoError('Fill in all four fields exactly as Zoho shows them.');
                 }
                 zoho_connect($host, $id, $secret, $code);
-                flash('Zoho CRM connected. New sign-ups and quote requests will appear as Leads.');
+                $mailNote = '';
+                try {
+                    zoho_mail_detect_zoid();
+                    $mailNote = ' Zoho Mail is connected too: customers can now create email accounts.';
+                } catch (Throwable $e) {
+                    $mailNote = ' Zoho Mail is not connected (' . $e->getMessage() . ').';
+                }
+                flash('Zoho connected. New sign-ups and quote requests will appear as CRM Leads.' . $mailNote);
+                break;
+            case 'mail_detect':
+                $zoid = zoho_mail_detect_zoid();
+                flash("Zoho Mail connected (organization $zoid). Customers can now create email accounts.");
                 break;
             case 'crm_test':
                 crm_queue_lead(crm_lead_record('Rowan Copy Test', (string) $user['email'], 'Test lead from Admin -> Integrations. You can delete it.'));
@@ -88,7 +99,9 @@ page_header('Integrations');
       <ol class="small">
         <li>Open <a href="https://api-console.zoho.com" target="_blank" rel="noopener">api-console.zoho.com</a> → <strong>Add Client</strong> → <strong>Self Client</strong> → Create.</li>
         <li>Copy the <strong>Client ID</strong> and <strong>Client Secret</strong> into the form below.</li>
-        <li>On the <strong>Generate Code</strong> tab, enter the scope <code>ZohoCRM.modules.leads.ALL</code>, choose 10 minutes, any description, then <strong>Create</strong> and copy the code.</li>
+        <li>On the <strong>Generate Code</strong> tab, paste this scope (one line), choose 10 minutes, any description, then <strong>Create</strong> and copy the code:<br>
+          <code class="wrap">ZohoCRM.modules.leads.ALL,<?= h(ZOHO_MAIL_SCOPES) ?></code></li>
+        <li>Sign in to the API Console as a <strong>Zoho Mail admin</strong> of your organization, so customer email accounts can be created.</li>
         <li>Paste the code below and click Connect within 10 minutes.</li>
       </ol>
       <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="crm_connect">
@@ -100,6 +113,22 @@ page_header('Integrations');
         <label>Grant code <input name="grant_code" autocomplete="off" required></label>
         <button class="btn">Connect Zoho CRM</button>
       </form>
+    <?php endif; ?>
+  </div>
+
+  <div class="card">
+    <h2>Zoho Mail</h2>
+    <p class="muted small">Every email account made through Rowan Copy (customers' and your team's) is a Zoho Mail account in your Zoho organization.
+      Customers manage theirs on the <strong>Email</strong> page; plan limits apply.</p>
+    <?php if (zoho_mail_enabled()): ?>
+      <p><span class="badge badge-live">Connected</span> Organization <?= h(app_secret('ZOHO_MAIL_ZOID')) ?> ·
+        <?= (int) db()->query('SELECT COUNT(*) FROM mail_domains')->fetchColumn() ?> customer domains ·
+        <?= (int) db()->query('SELECT COUNT(*) FROM mail_accounts')->fetchColumn() ?> email accounts</p>
+    <?php elseif ($crmOn): ?>
+      <p class="notice small">Zoho is connected, but not Zoho Mail. If you connected before Mail was added, disconnect above and connect again with the full scope list, then:</p>
+      <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="mail_detect"><button class="btn btn-sm">Connect Zoho Mail</button></form>
+    <?php else: ?>
+      <p class="muted small">Connect Zoho above (the scope list includes Zoho Mail).</p>
     <?php endif; ?>
   </div>
 
