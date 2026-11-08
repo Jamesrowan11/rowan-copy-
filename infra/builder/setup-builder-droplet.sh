@@ -67,6 +67,9 @@ say "Installing the Caddyfile"
 install_caddyfile "$here/Caddyfile" __ACME_EMAIL__ "$ACME_EMAIL" __APP_DOMAIN__ "$APP_DOMAIN" \
   __APP_DIR__ "$APP_DIR" __PRIVATE_IP__ "$PRIVATE_IP" __PHP_VERSION__ "$PHP_VERSION"
 
+say "Automatic deploys from GitHub"
+bash "$here/install-autodeploy.sh"
+
 say "Firewall: SSH, HTTP, HTTPS; the domain check (8080) only from the private network"
 apt-get install -y -q ufw
 ufw allow OpenSSH

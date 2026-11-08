@@ -48,8 +48,9 @@ function page_header(string $title, string $bodyClass = '', string $description 
       <a href="<?= h(base_url('billing.php')) ?>">Billing</a>
       <?php if (referrals_enabled()): ?><a href="<?= h(base_url('referrals.php')) ?>">Refer a friend</a><?php endif; ?>
       <a href="<?= h(base_url('account.php')) ?>">Settings</a>
+      <?php if (support_url() !== ''): ?><a href="<?= h(support_url()) ?>" target="_blank" rel="noopener">Help</a><?php endif; ?>
       <?php if (is_staff($user)): ?>
-        <a href="<?= h(base_url('admin-hosting.php')) ?>">Hosting</a>
+        <?php if (plesk_enabled()): ?><a href="<?= h(base_url('admin-hosting.php')) ?>">Hosting</a><?php endif; ?>
         <a href="<?= h(base_url('admin.php')) ?>"><?= is_admin($user) ? 'Admin' : 'Staff' ?></a>
       <?php endif; ?>
       <form method="post" action="<?= h(base_url('logout.php')) ?>" class="inline"><?= csrf_field() ?><button class="link">Log out</button></form>

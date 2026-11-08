@@ -24,6 +24,7 @@ require_once __DIR__ . '/registrar.php';
 require_once __DIR__ . '/domains.php';
 require_once __DIR__ . '/hosting.php';
 require_once __DIR__ . '/mailer.php';
+require_once __DIR__ . '/zoho.php';
 require_once RC_ROOT . '/vendor/autoload.php';
 
 function cfg(string $key, mixed $default = null): mixed
@@ -210,6 +211,16 @@ function migrate(PDO $pdo): void
     add_column($pdo, 'sites', 'custom_domain', 'TEXT');
     add_column($pdo, 'sites', 'taken_down', 'INTEGER NOT NULL DEFAULT 0');
     $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_domain ON sites(custom_domain)');
+    // Leads waiting to be sent to Zoho CRM (see lib/zoho.php).
+    $pdo->exec('CREATE TABLE IF NOT EXISTS crm_outbox (
+        id INTEGER PRIMARY KEY,
+        payload TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        zoho_id TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        sent_at TEXT
+    )');
 }
 
 /** Add a column if it doesn't exist yet. Returns true when it was added. */
