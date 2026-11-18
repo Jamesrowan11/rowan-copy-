@@ -159,6 +159,8 @@ function migrate(PDO $pdo): void
     add_column($pdo, 'users', 'plan_cancels', 'INTEGER NOT NULL DEFAULT 0');
     add_column($pdo, 'users', 'role', "TEXT NOT NULL DEFAULT 'customer'"); // customer | employee | admin
     add_column($pdo, 'users', 'referral_code', 'TEXT');
+    // When the customer last accepted the warning before editing their site's code (UTC).
+    add_column($pdo, 'users', 'code_terms_accepted_at', 'TEXT');
     add_column($pdo, 'sites', 'domain_connected_at', 'TEXT');
     $pdo->exec("CREATE TABLE IF NOT EXISTS domain_orders (
         id INTEGER PRIMARY KEY,
