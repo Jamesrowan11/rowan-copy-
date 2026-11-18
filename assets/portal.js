@@ -48,6 +48,28 @@
     document.querySelectorAll('details.menu[open]').forEach(function (d) { if (!d.contains(e.target)) d.removeAttribute('open'); });
   });
 
+  // ---- Forms that ask first: <form data-confirm="Are you sure?"> ----
+  document.querySelectorAll('form[data-confirm]').forEach(function (f) {
+    f.addEventListener('submit', function (e) { if (!confirm(f.dataset.confirm)) e.preventDefault(); });
+  });
+
+  // ---- Simple dialogs: [data-dialog-open="id"], [data-dialog-close] ----
+  document.querySelectorAll('[data-dialog-open]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var d = document.getElementById(b.dataset.dialogOpen);
+      if (d && typeof d.showModal === 'function') { d.showModal(); var f = d.querySelector('input:not([type=hidden])'); if (f) f.focus(); }
+    });
+  });
+  document.querySelectorAll('dialog.dlg').forEach(function (d) {
+    d.addEventListener('click', function (e) { if (e.target === d) d.close(); });
+    d.querySelectorAll('[data-dialog-close]').forEach(function (b) { b.addEventListener('click', function () { d.close(); }); });
+  });
+  // Type-to-confirm: the submit button unlocks once the word is typed.
+  document.querySelectorAll('form[data-type-confirm]').forEach(function (f) {
+    var input = f.querySelector('[data-type-input]'), btn = f.querySelector('[data-type-submit]');
+    input.addEventListener('input', function () { btn.disabled = input.value.trim().toUpperCase() !== f.dataset.typeConfirm; });
+  });
+
   // ---- Command palette ----
   var pal = document.getElementById('palette'), q = document.getElementById('palette-q'), list = document.getElementById('palette-list');
   var items = window.RC_PALETTE || [], shown = [], active = 0;

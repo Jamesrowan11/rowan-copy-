@@ -22,43 +22,48 @@ $body = "I use Rowan Copy for my website. Sign up with my link and your first mo
 
 page_header('Refer a friend');
 ?>
-<div class="page narrow">
-  <p class="eyebrow">Refer a friend</p>
-  <h1>Give a free month, get a free month.</h1>
-  <p class="lead-left">Share your link. Your friend gets their first <?= (int) $s['friend_trial_days'] ?> days on any paid plan free.
-    When they become a paying customer, you get a month of your plan free, added as credit to your next bill.</p>
+<div class="pg pg-narrow">
+  <div class="pg-head"><div><h1>Refer a friend</h1><p class="muted">Know someone who needs a website?</p></div></div>
 
-  <div class="card">
-    <label for="ref-link">Your link</label>
+  <section class="box hero-box refer">
+    <span class="refer-gift" aria-hidden="true"><?= icon('gift') ?></span>
+    <h2>Give a free month, get a free month</h2>
+    <p class="muted">Your friend gets their first <?= (int) $s['friend_trial_days'] ?> days on any paid plan free.
+      When they become a paying customer, you get a month of your plan free, added as credit to your next bill.</p>
     <div class="copy-row">
-      <input id="ref-link" value="<?= h($link) ?>" readonly onclick="this.select()">
-      <button class="btn" type="button" id="copy-btn">Copy</button>
+      <label for="ref-link" class="sr-only">Your referral link</label>
+      <input id="ref-link" value="<?= h($link) ?>" readonly>
+      <button class="btn btn-accent" type="button" id="copy-btn"><?= icon('check') ?><span>Copy link</span></button>
     </div>
-    <div class="row-actions share-row">
-      <a class="btn btn-ghost btn-sm" href="mailto:?subject=<?= rawurlencode($subject) ?>&body=<?= rawurlencode($body) ?>">Email it</a>
-      <a class="btn btn-ghost btn-sm" href="sms:?&body=<?= rawurlencode($body) ?>">Text it</a>
+    <div class="share-row">
+      <a class="btn btn-ghost btn-sm" href="mailto:?subject=<?= rawurlencode($subject) ?>&body=<?= rawurlencode($body) ?>"><?= icon('mail') ?> Email</a>
+      <a class="btn btn-ghost btn-sm" href="sms:?&body=<?= rawurlencode($body) ?>">Text</a>
       <a class="btn btn-ghost btn-sm" href="https://www.facebook.com/sharer/sharer.php?u=<?= rawurlencode($link) ?>" target="_blank" rel="noopener">Facebook</a>
       <a class="btn btn-ghost btn-sm" href="https://www.linkedin.com/sharing/share-offsite/?url=<?= rawurlencode($link) ?>" target="_blank" rel="noopener">LinkedIn</a>
+      <button class="btn btn-ghost btn-sm" type="button" id="share-btn" hidden>More…</button>
     </div>
-  </div>
+  </section>
 
-  <div class="stat-row">
-    <div class="stat"><strong><?= count($rows) ?></strong><span>friends signed up</span></div>
-    <div class="stat"><strong><?= $paying ?></strong><span>became customers</span></div>
-    <div class="stat"><strong>$<?= number_format($earned / 100, 2) ?></strong><span>credit earned</span></div>
+  <div class="kpis">
+    <div class="box kpi"><span class="kicker">Signed up</span><strong><?= count($rows) ?></strong></div>
+    <div class="box kpi"><span class="kicker">Became customers</span><strong><?= $paying ?></strong></div>
+    <div class="box kpi"><span class="kicker">Credit earned</span><strong>$<?= number_format($earned / 100, 2) ?></strong></div>
   </div>
 
   <?php if ($rows): ?>
-    <div class="table-wrap"><table>
-      <tr><th>Friend</th><th>Joined</th><th>Status</th></tr>
+    <h2 class="pg-h2">Your friends</h2>
+    <div class="box box-flush"><table class="tbl">
+      <thead><tr><th>Friend</th><th>Joined</th><th>Status</th></tr></thead>
+      <tbody>
       <?php foreach ($rows as $r): ?>
         <tr>
-          <td><?= h(strtok($r['name'], ' ')) ?></td>
+          <td><strong><?= h(strtok($r['name'], ' ')) ?></strong></td>
           <td><?= h(date('M j, Y', strtotime($r['created_at'] . ' UTC'))) ?></td>
-          <td><?= $r['status'] === 'rewarded' ? '✓ You earned $' . number_format($r['reward_cents'] / 100, 2)
-              : ($r['status'] === 'capped' ? 'Yearly reward limit reached' : 'Signed up, not paying yet') ?></td>
+          <td><?= $r['status'] === 'rewarded' ? '<span class="tag tag-ok">You earned $' . number_format($r['reward_cents'] / 100, 2) . '</span>'
+              : ($r['status'] === 'capped' ? '<span class="tag">Yearly limit reached</span>' : '<span class="tag tag-accent">Not paying yet</span>') ?></td>
         </tr>
       <?php endforeach; ?>
+      </tbody>
     </table></div>
   <?php endif; ?>
 
@@ -66,11 +71,19 @@ page_header('Refer a friend');
     Your friend has to be new to Rowan Copy and sign up through your link.</p>
 </div>
 <script>
-document.getElementById('copy-btn').addEventListener('click', function () {
-  var input = document.getElementById('ref-link'), btn = this;
-  input.select();
-  (navigator.clipboard ? navigator.clipboard.writeText(input.value) : Promise.reject()).catch(function () { document.execCommand('copy'); })
-    .finally(function () { btn.textContent = 'Copied!'; setTimeout(function () { btn.textContent = 'Copy'; }, 2000); });
-});
+(function () {
+  var input = document.getElementById('ref-link'), btn = document.getElementById('copy-btn'), label = btn.querySelector('span');
+  input.addEventListener('focus', function () { input.select(); });
+  btn.addEventListener('click', function () {
+    input.select();
+    (navigator.clipboard ? navigator.clipboard.writeText(input.value) : Promise.reject()).catch(function () { document.execCommand('copy'); })
+      .finally(function () { label.textContent = 'Copied!'; btn.classList.add('is-done'); window.rcToast && window.rcToast('Link copied'); setTimeout(function () { label.textContent = 'Copy link'; btn.classList.remove('is-done'); }, 2000); });
+  });
+  var share = document.getElementById('share-btn');
+  if (navigator.share) {
+    share.hidden = false;
+    share.addEventListener('click', function () { navigator.share({ title: <?= json_encode($subject) ?>, text: <?= json_encode($body) ?> }).catch(function () {}); });
+  }
+})();
 </script>
 <?php page_footer();
