@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/marketing.php';
+require_once __DIR__ . '/portal.php';
 
 /**
  * @param string $description meta description for public pages (search engines and link previews)
@@ -13,6 +14,12 @@ function page_header(string $title, string $bodyClass = '', string $description 
     $flash = flash();
     $current = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
     $c = company();
+    // Logged-in customer pages use the portal shell (sidebar, tab bar, Ctrl+K, toasts).
+    $portal = $user !== null && is_portal_page($current);
+    $GLOBALS['RC_IS_PORTAL'] = $portal;
+    if ($portal) {
+        $bodyClass = trim($bodyClass . ' portal');
+    }
     ?>
 <!doctype html>
 <html lang="en">
@@ -34,6 +41,9 @@ function page_header(string $title, string $bodyClass = '', string $description 
 <link rel="stylesheet" href="<?= h(base_url('assets/app.css')) ?>">
 </head>
 <body class="<?= h($bodyClass) ?>">
+<?php if ($portal): ?>
+<script>try { if (localStorage.getItem('rc-sidebar') === 'collapsed') document.body.classList.add('sb-collapsed'); } catch (e) {}</script>
+<?php portal_shell_open($user, $current, $flash); return; endif; ?>
 <a class="skip" href="#main">Skip to content</a>
 <header class="nav">
   <a class="brand" href="<?= h(base_url('')) ?>">
@@ -73,6 +83,11 @@ function page_header(string $title, string $bodyClass = '', string $description 
 
 function page_footer(): void
 {
+    if (!empty($GLOBALS['RC_IS_PORTAL'])) {
+        portal_shell_close();
+        echo "</body>\n</html>\n";
+        return;
+    }
     $c = company();
     ?>
 </main>
