@@ -1,7 +1,8 @@
 <?php
 // ============================================================================
 // POST api/site.php: everything in the editor that isn't AI.
-// action = publish | unpublish | restore | settings | domain | connect_domain | get_html | save_html | duplicate | delete | upload | delete_image
+// action = publish | unpublish | restore | settings | domain | connect_domain | accept_code_terms | get_html
+//          | save_html | duplicate | delete | upload | delete_image
 // ============================================================================
 
 require __DIR__ . '/../lib/bootstrap.php';
@@ -115,12 +116,29 @@ switch ($_POST['action'] ?? '') {
         }
         json_out($r['ok'] ? ['ok' => true, 'message' => $r['message']] : ['error' => $r['message']], $r['ok'] ? 200 : 422);
 
-    case 'get_html':
-        $v = $pdo->prepare('SELECT html FROM versions WHERE id = ?');
-        $v->execute([(int) $site['current_version_id']]);
-        json_out(['ok' => true, 'html' => (string) $v->fetchColumn()]);
+    case 'accept_code_terms':
+        // The customer ticked "I understand" on the warning before editing code.
+        if (!can_edit_code($user)) {
+            json_out(['error' => 'Editing your website\'s code is included on Starter and higher plans.', 'upgrade' => true], 403);
+        }
+        $pdo->prepare('UPDATE users SET code_terms_accepted_at = ? WHERE id = ?')->execute([gmdate('Y-m-d H:i:s'), (int) $user['id']]);
+        json_out(['ok' => true]);
 
+    case 'get_html':
     case 'save_html':
+        if (!can_edit_code($user)) {
+            json_out(['error' => 'Editing your website\'s code is included on Starter and higher plans.', 'upgrade' => true], 403);
+        }
+        $accepted = $pdo->prepare('SELECT code_terms_accepted_at FROM users WHERE id = ?');
+        $accepted->execute([(int) $user['id']]);
+        if (!$accepted->fetchColumn()) {
+            json_out(['error' => 'Please read and accept the warning before editing your website\'s code.'], 403);
+        }
+        if ($_POST['action'] === 'get_html') {
+            $v = $pdo->prepare('SELECT html FROM versions WHERE id = ?');
+            $v->execute([(int) $site['current_version_id']]);
+            json_out(['ok' => true, 'html' => (string) $v->fetchColumn()]);
+        }
         $html = (string) ($_POST['html'] ?? '');
         if (strlen($html) > 1_000_000) {
             json_out(['error' => 'That page is too large (1 MB maximum).'], 422);

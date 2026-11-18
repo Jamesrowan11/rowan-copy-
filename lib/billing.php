@@ -12,7 +12,7 @@ const DEFAULT_PLANS = [
     'free' => [
         'name' => 'Free', 'price' => '$0', 'stripe_price' => '',
         'ai_limit' => 5, 'max_sites' => 1, 'max_mailboxes' => 0, 'dns' => false,
-        'custom_domain' => false, 'remove_badge' => false,
+        'custom_domain' => false, 'remove_badge' => false, 'edit_code' => false,
         'features' => ['1 website', '5 AI designs or edits a month', 'Rowan Copy web address'],
     ],
 ];
@@ -38,6 +38,20 @@ function user_plan(?array $user): array
 function plan_feature(?array $user, string $feature): bool
 {
     return !empty(user_plan($user)[$feature]);
+}
+
+/**
+ * May this customer edit their website's code by hand? Set 'edit_code' on a
+ * plan in config.php; a plan without the setting allows it on every paid plan
+ * (Starter and up) and not on Free. Staff always can, for support.
+ */
+function can_edit_code(?array $user): bool
+{
+    if (is_staff($user)) {
+        return true;
+    }
+    $plan = user_plan($user);
+    return array_key_exists('edit_code', $plan) ? (bool) $plan['edit_code'] : plan_key($user) !== 'free';
 }
 
 function max_sites(array $user): int

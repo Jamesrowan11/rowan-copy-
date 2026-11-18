@@ -320,16 +320,43 @@
       location.href = r.url;
     });
   });
-  $('#toggle-code').addEventListener('click', function () {
-    var panel = $('#code-panel');
-    if (!panel.hidden) { panel.hidden = true; return; }
-    if (!RC.currentVersionId) return alert('Build your site first.');
+  // Editing code (Starter and up): show the warning every time, and only open
+  // the code once they've ticked "I understand" (recorded on their account).
+  function openCode() {
     siteAction('get_html').then(function (r) {
       if (r.error) return alert(r.error);
       $('#code').value = r.html;
-      panel.hidden = false;
+      $('#code-panel').hidden = false;
     });
+  }
+  var toggleCode = $('#toggle-code');
+  if (toggleCode) toggleCode.addEventListener('click', function () {
+    var panel = $('#code-panel');
+    if (!panel.hidden) { panel.hidden = true; return; }
+    if (!RC.currentVersionId) return alert('Build your site first.');
+    var dlg = $('#code-warning'), ack = $('#code-warning-ack');
+    if (!dlg || typeof dlg.showModal !== 'function') {
+      if (!confirm('You are about to edit your website\'s code. A mistake can break your website, and Rowan Copy ' +
+          'support can\'t fix code you change by hand. You can go back to an earlier version from History. Continue?')) return;
+      return siteAction('accept_code_terms').then(function (r) { if (r.error) return alert(r.error); openCode(); });
+    }
+    ack.checked = false;
+    $('#code-warning-ok').disabled = true;
+    dlg.returnValue = '';
+    dlg.showModal();
   });
+  if ($('#code-warning')) {
+    $('#code-warning-ack').addEventListener('change', function () {
+      $('#code-warning-ok').disabled = !this.checked;
+    });
+    $('#code-warning').addEventListener('close', function () {
+      if (this.returnValue !== 'ok' || !$('#code-warning-ack').checked) return;
+      siteAction('accept_code_terms').then(function (r) {
+        if (r.error) return alert(r.error);
+        openCode();
+      });
+    });
+  }
   $('#save-code').addEventListener('click', function () {
     siteAction('save_html', { html: $('#code').value }).then(function (r) {
       if (r.error) return alert(r.error);

@@ -381,3 +381,14 @@ a.m-card:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(20,35
 .mailbox-row input[type=password] { width: 12em; margin: 0; }
 .mailbox-new { margin-top: 14px; }
 code.wrap { word-break: break-all; white-space: normal; }
+
+/* Warning shown before a customer edits their website's code (editor.php) */
+.code-warning { max-width: 520px; border: 1px solid #e3e6ee; border-radius: 12px; padding: 1.4rem 1.5rem; }
+.code-warning::backdrop { background: rgba(15, 23, 42, .55); }
+.code-warning h2 { margin: 0 0 .6rem; font-size: 1.15rem; }
+.code-warning ul { padding-left: 1.2rem; margin: .6rem 0 1rem; }
+.code-warning li { margin: .35rem 0; }
+.code-warning-ack { display: flex; flex-direction: row; gap: .55rem; align-items: flex-start; font-size: .92rem; font-weight: 400; margin-bottom: 1rem; }
+.code-warning-ack input { width: auto; flex: 0 0 auto; margin: .2rem 0 0; }
+.code-warning-ack span { flex: 1; }
+.code-warning .row-actions { justify-content: flex-end; }

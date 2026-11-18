@@ -42,6 +42,7 @@ $state = [
     'used' => ai_uses_this_month((int) $user['id']),
     'verified' => is_verified($user),
     'limit' => ai_limit($user),
+    'canEditCode' => can_edit_code($user),
     'autoBuild' => !$site['current_version_id'] && isset($_GET['build']),
     'urls' => [
         'generate' => base_url('api/generate.php'),
@@ -164,10 +165,35 @@ page_header('Editing ' . $site['name'], 'editor-page');
       <div class="row-actions">
         <a class="btn btn-ghost btn-sm" href="<?= h(base_url('download.php?id=' . $site['id'])) ?>">Download HTML</a>
         <button id="duplicate-site" class="btn btn-ghost btn-sm">Duplicate site</button>
-        <button id="toggle-code" class="btn btn-ghost btn-sm">Edit code (advanced)</button>
+        <?php if (can_edit_code($user)): ?>
+          <button id="toggle-code" class="btn btn-ghost btn-sm">Edit code (advanced)</button>
+        <?php else: ?>
+          <a class="btn btn-ghost btn-sm" href="<?= h(base_url('billing.php')) ?>" title="Editing your website's code is included on Starter and higher plans">Edit code: Starter and up</a>
+        <?php endif; ?>
       </div>
+      <dialog id="code-warning" class="code-warning">
+        <form method="dialog">
+          <h2>Before you edit your website's code</h2>
+          <p>You're about to change your website's code directly. Please read this first:</p>
+          <ul>
+            <li><strong>A mistake can break your website</strong>, its layout, its contact form, or other features.</li>
+            <li><strong>Rowan Copy support can't fix or rewrite code you change by hand.</strong> You are responsible for your edits.</li>
+            <li>Saving creates a new <strong>draft</strong>. Nothing changes on your live website until you click <strong>Publish</strong>.</li>
+            <li>If something goes wrong, you can go back to an earlier version from <strong>History</strong>.</li>
+            <li>AI edits after a hand edit start from your edited code.</li>
+          </ul>
+          <label class="code-warning-ack">
+            <input type="checkbox" id="code-warning-ack">
+            <span>I understand, and I've read <a href="<?= h(base_url('terms.php')) ?>#editing-code" target="_blank" rel="noopener">Editing your website's code</a> in the Terms of Service.</span>
+          </label>
+          <div class="row-actions">
+            <button value="cancel" class="btn btn-ghost btn-sm">Cancel</button>
+            <button value="ok" id="code-warning-ok" class="btn btn-sm" disabled>Edit code</button>
+          </div>
+        </form>
+      </dialog>
       <div id="code-panel" hidden>
-        <p class="muted small">For people who know HTML. Saving creates a new version you can undo from History.</p>
+        <p class="muted small">You're editing your website's code. Saving creates a new draft version; it goes live when you click Publish, and you can go back to an earlier version from History.</p>
         <textarea id="code" class="code-area" spellcheck="false"></textarea>
         <button id="save-code" class="btn btn-sm">Save code</button>
       </div>

@@ -27,6 +27,16 @@ page_header('Terms of Service');
   </ul>
   <p>We may remove content or suspend accounts that break these rules.</p>
 
+  <h2 id="editing-code">Editing your website's code</h2>
+  <p>On Starter and higher plans you can edit your website's code (HTML, CSS and JavaScript) directly from the editor. Before you do, we show you a warning, and we ask you to confirm that you understand it; we record when you confirm. By editing your code you agree that:</p>
+  <ul>
+    <li><strong>You are responsible for your edits.</strong> A mistake in the code can break your website's layout, forms or other features, or stop it from working. Our support team does not fix, debug or rewrite code you change by hand, and problems caused by your edits are not covered by any service commitment.</li>
+    <li><strong>Saving creates a new draft version.</strong> Your live website changes only when you publish. You can go back to an earlier version from your site's History; we can't recover changes or versions that aren't in your History.</li>
+    <li><strong>Your code must follow these terms.</strong> Code you add counts as your content: it may not contain malware, mine cryptocurrency, collect visitors' passwords or payment details, track visitors unlawfully, or attack or overload Rowan Copy or other sites. We may unpublish your site, restore it to an earlier version, or suspend your account if it does.</li>
+    <li><strong>AI edits build on your code.</strong> After you edit the code, later AI edits start from your edited version and may change or remove what you wrote.</li>
+    <li><strong>If you move to the Free plan</strong>, your website stays as it is, but you can no longer edit its code.</li>
+  </ul>
+
   <h2>Messages from your visitors</h2>
   <p>When visitors use a form on your site, we store their messages for you. You are responsible for handling that information lawfully.</p>
 

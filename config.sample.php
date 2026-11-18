@@ -34,12 +34,14 @@ return [
     //   max_sites      websites
     //   max_mailboxes  email accounts across all of their domains you host
     //   dns            can edit DNS records in the portal
+    //   edit_code      can edit their website's code by hand (they see a warning first).
+    //                  Left out: allowed on every plan except free.
     'plans' => [
         'free' => [
             'name' => 'Free', 'price' => '$0', 'price_yearly' => '$0',
             'stripe_price' => '', 'stripe_price_yearly' => '',
             'ai_limit' => 5, 'max_sites' => 1, 'max_mailboxes' => 0, 'dns' => false,
-            'custom_domain' => false, 'remove_badge' => false,
+            'custom_domain' => false, 'remove_badge' => false, 'edit_code' => false,
             'features' => ['1 website', '5 AI designs or edits a month', 'Free rowancopy.com web address',
                 'Contact-form inbox and visitor stats', 'Email support'],
         ],
@@ -48,8 +50,9 @@ return [
             'stripe_price' => '', 'stripe_price_yearly' => '',
             'ai_limit' => 30, 'max_sites' => 1, 'max_mailboxes' => 1, 'dns' => false,
             'custom_domain' => true, 'remove_badge' => true,
+            'edit_code' => true,
             'features' => ['1 website', '30 AI designs or edits a month', 'Use your own domain', 'No Rowan Copy badge',
-                '1 email account on your domain', 'Email support'],
+                '1 email account on your domain', 'Edit your website\'s code', 'Email support'],
         ],
         'business' => [
             'name' => 'Business', 'price' => '$30/month', 'price_yearly' => '$300/year',
@@ -57,7 +60,9 @@ return [
             'ai_limit' => 75, 'max_sites' => 3, 'max_mailboxes' => 5, 'dns' => true,
             'custom_domain' => true, 'remove_badge' => true,
             'features' => ['3 websites', '75 AI designs or edits a month', 'Use your own domain', 'No Rowan Copy badge',
-                '5 email accounts on your domain', 'DNS management in your portal', 'Priority support'],
+                '5 email accounts on your domain', 'DNS management in your portal', 'Edit your website\'s code',
+                'Priority support'],
+            'edit_code' => true,
         ],
         'pro' => [
             'name' => 'Pro', 'price' => '$69/month', 'price_yearly' => '$690/year',
@@ -65,7 +70,9 @@ return [
             'ai_limit' => 200, 'max_sites' => 10, 'max_mailboxes' => 20, 'dns' => true,
             'custom_domain' => true, 'remove_badge' => true,
             'features' => ['10 websites', '200 AI designs or edits a month', 'Use your own domain', 'No Rowan Copy badge',
-                '20 email accounts on your domain', 'DNS management in your portal', 'Priority support and a monthly check-in'],
+                '20 email accounts on your domain', 'DNS management in your portal', 'Edit your website\'s code',
+                'Priority support and a monthly check-in'],
+            'edit_code' => true,
         ],
     ],
 
