@@ -9,7 +9,7 @@ foreach (plans() as $key => $p) {
     $plans[] = ['key' => $key, 'name' => $p['name'],
         'price' => $num($p['price'] ?? '0'), 'price_yearly' => $num($p['price_yearly'] ?? ($p['price'] ?? '0')),
         'price_label' => $p['price'] ?? '', 'price_yearly_label' => $p['price_yearly'] ?? '',
-        'features' => array_values((array) ($p['features'] ?? [])), 'popular' => $key === 'business'];
+        'features' => plan_features((string) $key, (array) $p), 'popular' => $key === 'business'];
 }
 header('Cache-Control: public, max-age=300');
 json_out(['plans' => $plans]);

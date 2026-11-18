@@ -54,6 +54,28 @@ function can_edit_code(?array $user): bool
     return array_key_exists('edit_code', $plan) ? (bool) $plan['edit_code'] : plan_key($user) !== 'free';
 }
 
+/**
+ * A plan's feature list as shown to customers (pricing, billing, the plans
+ * API). Adds "Edit your website's code" to plans that include it, unless the
+ * list already mentions code, placing it before the support line.
+ */
+function plan_features(string $key, array $plan): array
+{
+    $features = array_values(array_map('strval', (array) ($plan['features'] ?? [])));
+    $editsCode = array_key_exists('edit_code', $plan) ? (bool) $plan['edit_code'] : $key !== 'free';
+    if (!$editsCode || preg_grep('/\bcode\b/i', $features)) {
+        return $features;
+    }
+    $line = "Edit your website's code";
+    $support = array_keys(preg_grep('/support/i', $features));
+    if ($support) {
+        array_splice($features, $support[0], 0, [$line]);
+    } else {
+        $features[] = $line;
+    }
+    return $features;
+}
+
 function max_sites(array $user): int
 {
     return (int) (user_plan($user)['max_sites'] ?? 1);
