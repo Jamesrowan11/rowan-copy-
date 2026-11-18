@@ -41,6 +41,11 @@ function icon(string $name, string $class = 'ico'): string
         'sparkles' => '<path d="M9.94 14.06A2 2 0 0 0 8.5 12.6l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 8.5A2 2 0 0 0 9.94 7.06l1.58-6.13a.5.5 0 0 1 .96 0l1.58 6.13A2 2 0 0 0 15.5 8.5l6.13 1.58a.5.5 0 0 1 0 .96L15.5 12.6a2 2 0 0 0-1.44 1.46l-1.58 6.13a.5.5 0 0 1-.96 0z"/>',
         'x' => '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
         'check' => '<path d="M20 6 9 17l-5-5"/>',
+        'arrow-left' => '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+        'monitor' => '<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>',
+        'tablet' => '<rect width="16" height="20" x="4" y="2" rx="2"/><line x1="12" x2="12.01" y1="18" y2="18"/>',
+        'phone' => '<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/>',
+        'restore' => '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
         'download' => '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
     ];
     return '<svg class="' . h($class) . '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"'
@@ -254,4 +259,34 @@ function time_ago(string $utc): string
         }
     }
     return 'Just now';
+}
+
+/** The Visitors chart in the editor: an area chart of daily visits (oldest first) with day labels. */
+function visits_chart(array $values): string
+{
+    $w = 340; $h = 140; $pad = 18;
+    $n = count($values);
+    $max = max(1, ...$values ?: [0]);
+    $pts = [];
+    foreach ($values as $i => $v) {
+        $pts[] = round($n > 1 ? $i * $w / ($n - 1) : 0, 1) . ',' . round($h - $pad - ($v / $max) * ($h - $pad - 8), 1);
+    }
+    $line = implode(' ', $pts);
+    $grid = '';
+    foreach ([0.25, 0.5, 0.75] as $f) {
+        $y = round(8 + ($h - $pad - 8) * $f, 1);
+        $grid .= '<line x1="0" x2="' . $w . '" y1="' . $y . '" y2="' . $y . '" stroke="var(--line)" stroke-dasharray="3 4"/>';
+    }
+    $labels = '';
+    foreach ([0, (int) floor(($n - 1) / 2), $n - 1] as $k => $i) {
+        $date = (new DateTimeImmutable(gmdate('Y-m-d') . ' -' . ($n - 1 - $i) . ' days'))->format('M j');
+        $x = $n > 1 ? $i * $w / ($n - 1) : 0;
+        $anchor = $k === 0 ? 'start' : ($k === 2 ? 'end' : 'middle');
+        $labels .= '<text x="' . round($x, 1) . '" y="' . ($h - 3) . '" text-anchor="' . $anchor . '" class="chart-lbl">' . $date . '</text>';
+    }
+    return '<svg viewBox="0 0 ' . $w . ' ' . $h . '" role="img" aria-label="Daily visits, last ' . $n . ' days, most ' . $max . ' in a day" preserveAspectRatio="none">'
+        . '<defs><linearGradient id="vg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#e08a3c" stop-opacity=".35"/><stop offset="1" stop-color="#e08a3c" stop-opacity="0"/></linearGradient></defs>'
+        . $grid . '<polygon points="0,' . ($h - $pad) . ' ' . $line . ' ' . $w . ',' . ($h - $pad) . '" fill="url(#vg)"/>'
+        . '<polyline points="' . $line . '" fill="none" stroke="#9a521a" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>'
+        . $labels . '</svg>';
 }
