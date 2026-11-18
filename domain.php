@@ -98,13 +98,15 @@ try {
 
 page_header($name);
 ?>
-<div class="page">
+<div class="pg pg-narrow">
+  <div class="pg-head"><div>
   <?php if ($staffMode): ?>
-    <a class="back" href="<?= h(base_url('admin-hosting.php')) ?>">← Hosting</a>
+    <a class="back" href="<?= h(base_url('admin-hosting.php')) ?>"><?= icon('arrow-left') ?> Hosting</a>
   <?php else: ?>
-    <a class="back" href="<?= h(base_url('dashboard.php')) ?>">← Dashboard</a>
+    <a class="back" href="<?= h(base_url('domains.php')) ?>"><?= icon('arrow-left') ?> Domains</a>
   <?php endif; ?>
-  <h1><?= h($name) ?></h1>
+  <h1><?= h($name) ?></h1><p class="muted">Email accounts and DNS for this domain.</p>
+  </div></div>
   <?php if ($loadError): ?><p class="error"><?= h($loadError) ?></p><?php endif; ?>
 
   <div class="card">

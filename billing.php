@@ -140,73 +140,96 @@ if (!isset($_GET['interval']) && $hasSub) {
     $interval = $currentInterval;
 }
 
+$order = array_keys(plans());
+$rank = array_flip($order);
+$plan = user_plan($user);
+$priceNow = $currentInterval === 'year' && !empty($plan['price_yearly']) ? $plan['price_yearly'] : ($plan['price'] ?? '');
 page_header('Billing');
 ?>
-<div class="page">
-  <h1>Plans and billing</h1>
-  <?php if ($error): ?><p class="error"><?= h($error) ?></p><?php endif; ?>
+<div class="pg">
+  <div class="pg-head"><div><h1>Billing</h1><p class="muted">Change plans any time. No surprises.</p></div></div>
+  <?php if ($error): ?><p class="error" role="alert"><?= h($error) ?></p><?php endif; ?>
+  <?php if ($user['subscription_status'] === 'past_due'): ?>
+    <p class="error" role="alert">Your last payment didn't go through. Please update your card to keep your plan.</p>
+  <?php endif; ?>
 
-  <div class="card">
-    <h2>Your plan: <?= h(user_plan($user)['name']) ?></h2>
-    <?php if ($user['subscription_status'] === 'past_due'): ?>
-      <p class="error">Your last payment didn't go through. Please update your card to keep your plan.</p>
-    <?php endif; ?>
-    <?php if ($hasSub && $user['plan_renews_at']): ?>
-      <p class="muted"><?= $user['plan_cancels'] ? 'Ends on ' : 'Renews on ' ?><?= h(date('F j, Y', strtotime($user['plan_renews_at'] . ' UTC'))) ?>.</p>
-    <?php elseif ($user['plan_source'] === 'manual'): ?>
-      <p class="muted">Your plan is managed by Rowan Copy. Contact <?= h((string) cfg('support_email')) ?> with billing questions.</p>
-    <?php endif; ?>
+  <section class="box plan-now">
+    <div class="plan-now-main">
+      <span class="kicker">Current plan</span>
+      <strong class="plan-now-name"><?= h($plan['name']) ?> <span><?= h($priceNow) ?></span></strong>
+      <span class="plan-now-sub">
+        <?php if ($hasSub && $user['plan_renews_at']): ?>
+          <?= $user['plan_cancels'] ? 'Ends' : 'Renews' ?> <?= h(date('F j, Y', strtotime($user['plan_renews_at'] . ' UTC'))) ?><?= $currentInterval === 'year' ? ' · billed yearly' : '' ?>
+        <?php elseif ($user['plan_source'] === 'manual'): ?>
+          Managed by Rowan Copy. Questions? <?= h((string) cfg('support_email')) ?>
+        <?php else: ?>
+          <?= $current === array_key_last(plans()) ? 'Thanks for being on our top plan.' : 'Upgrade any time to unlock more websites and features.' ?>
+        <?php endif; ?>
+      </span>
+    </div>
     <?php if ($user['stripe_customer_id'] && stripe_enabled()): ?>
       <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="portal">
-        <button class="btn btn-ghost">Manage billing: card and invoices</button></form>
+        <button class="btn btn-accent"><?= icon('card') ?> Card and invoices</button></form>
     <?php endif; ?>
-  </div>
+  </section>
 
   <?php if (!$hasSub && ($trialDays = referral_trial_days($user)) > 0): ?>
     <div class="notice">🎁 You were invited by a friend: your first <?= $trialDays ?> days on any paid plan are free. You won't be charged until the trial ends, and you can cancel before then.</div>
   <?php endif; ?>
 
-  <?php if ($hasYearly): ?>
-    <div class="interval-toggle" role="group" aria-label="Billing period">
-      <a href="<?= h(base_url('billing.php')) ?>" class="<?= $interval === 'month' ? 'active' : '' ?>">Monthly</a>
-      <a href="<?= h(base_url('billing.php?interval=year')) ?>" class="<?= $interval === 'year' ? 'active' : '' ?>">Yearly <span class="save">2 months free</span></a>
-    </div>
-  <?php endif; ?>
+  <div class="pg-row">
+    <h2 class="pg-h2">Plans</h2>
+    <?php if ($hasYearly): ?>
+      <div class="seg" role="group" aria-label="Billing period">
+        <a href="<?= h(base_url('billing.php?interval=month')) ?>"<?= $interval === 'month' ? ' aria-current="true"' : '' ?>>Monthly</a>
+        <a href="<?= h(base_url('billing.php?interval=year')) ?>"<?= $interval === 'year' ? ' aria-current="true"' : '' ?>>Yearly <small>2 months free</small></a>
+      </div>
+    <?php endif; ?>
+  </div>
 
-  <div class="plan-grid">
-    <?php foreach (plans() as $key => $plan): ?>
-      <div class="card plan<?= $key === $current ? ' plan-current' : '' ?>">
-        <h3><?= h($plan['name']) ?></h3>
-        <p class="plan-price"><?= h($interval === 'year' && !empty($plan['price_yearly']) ? $plan['price_yearly'] : ($plan['price'] ?? '')) ?></p>
-        <ul>
-          <?php foreach (plan_features((string) $key, (array) $plan) as $f): ?><li><?= h($f) ?></li><?php endforeach; ?>
+  <div class="plans">
+    <?php foreach (plans() as $key => $p): ?>
+      <?php
+        $isCurrent = $key === $current;
+        $up = ($rank[$key] ?? 0) > ($rank[$current] ?? 0);
+        $popular = $key === 'business';
+      ?>
+      <div class="box plan-card<?= $isCurrent ? ' is-current' : '' ?><?= $popular ? ' is-popular' : '' ?>">
+        <?php if ($popular): ?><span class="plan-flag">Most popular</span><?php endif; ?>
+        <div class="plan-top"><h3><?= h($p['name']) ?></h3><?php if ($isCurrent): ?><span class="tag tag-ok">Your plan</span><?php endif; ?></div>
+        <p class="plan-cost"><?= h($interval === 'year' && !empty($p['price_yearly']) ? $p['price_yearly'] : ($p['price'] ?? '')) ?></p>
+        <ul class="ticks">
+          <?php foreach (plan_features((string) $key, (array) $p) as $f): ?><li><?= icon('check') ?><?= h($f) ?></li><?php endforeach; ?>
         </ul>
-        <?php if ($key === $current && (!$hasSub || $interval === $currentInterval)): ?>
-          <span class="badge badge-live">Current plan</span>
+        <div class="plan-cta">
+        <?php if ($isCurrent && (!$hasSub || $interval === $currentInterval)): ?>
           <?php if ($hasSub && $user['plan_cancels']): ?>
-            <form method="post" class="plan-action"><?= csrf_field() ?><input type="hidden" name="action" value="resume"><button class="btn btn-ghost btn-block">Keep my plan</button></form>
+            <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="resume"><button class="btn btn-accent btn-block">Keep my plan</button></form>
+          <?php else: ?>
+            <button class="btn btn-ghost btn-block" disabled>Current plan</button>
           <?php endif; ?>
         <?php elseif ($key === 'free' && $hasSub): ?>
           <?php if (!$user['plan_cancels']): ?>
-            <form method="post" class="plan-action" onsubmit="return confirm('Cancel your plan? It stays active until the end of this billing period, then you move to Free. Your websites stay online.')">
+            <form method="post" data-confirm="Cancel your plan? It stays active until the end of this billing period, then you move to Free. Your websites stay online.">
               <?= csrf_field() ?><input type="hidden" name="action" value="cancel"><button class="btn btn-ghost btn-block">Cancel plan</button></form>
           <?php else: ?>
             <span class="muted small">You'll move to Free when your current period ends.</span>
           <?php endif; ?>
-        <?php elseif (plan_price_id($plan, $interval) !== '' && stripe_enabled()): ?>
+        <?php elseif (plan_price_id($p, $interval) !== '' && stripe_enabled()): ?>
           <?php if ($hasSub): ?>
-            <?php $label = $key === $current ? 'Switch to ' . ($interval === 'year' ? 'yearly' : 'monthly') : 'Switch to ' . $plan['name']; ?>
-            <form method="post" class="plan-action" onsubmit="return confirm(<?= h(json_encode($label . '? The price difference for the rest of this period is charged or credited right away.')) ?>)">
+            <?php $label = $isCurrent ? 'Switch to ' . ($interval === 'year' ? 'yearly' : 'monthly') : ($up ? 'Upgrade to ' : 'Switch to ') . $p['name']; ?>
+            <form method="post" data-confirm="<?= h($label . '? The price difference for the rest of this period is charged or credited right away.') ?>">
               <?= csrf_field() ?><input type="hidden" name="action" value="switch"><input type="hidden" name="plan" value="<?= h($key) ?>"><input type="hidden" name="interval" value="<?= h($interval) ?>">
-              <button class="btn btn-block"><?= h($label) ?></button></form>
+              <button class="btn btn-block <?= $up ? 'btn-accent' : 'btn-ghost' ?>"><?= h($label) ?></button></form>
           <?php else: ?>
             <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="checkout"><input type="hidden" name="plan" value="<?= h($key) ?>"><input type="hidden" name="interval" value="<?= h($interval) ?>">
-              <button class="btn btn-block">Choose <?= h($plan['name']) ?></button></form>
+              <button class="btn btn-block <?= $up ? 'btn-accent' : 'btn-ghost' ?>"><?= $up ? 'Upgrade to ' : 'Choose ' ?><?= h($p['name']) ?></button></form>
           <?php endif; ?>
         <?php endif; ?>
+        </div>
       </div>
     <?php endforeach; ?>
   </div>
-  <p class="muted small">Payments are handled securely by Stripe. Rowan Copy never sees your card number.</p>
+  <p class="muted small">Payments are handled securely by Stripe. Rowan Copy never sees your card number. Past invoices are under “Card and invoices”.</p>
 </div>
 <?php page_footer();

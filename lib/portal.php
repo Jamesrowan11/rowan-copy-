@@ -58,7 +58,7 @@ function portal_nav(array $user): array
 {
     $unread = db()->prepare('SELECT COUNT(*) FROM submissions m JOIN sites s ON s.id = m.site_id WHERE s.user_id = ? AND m.is_read = 0');
     $unread->execute([$user['id']]);
-    $items = [['dashboard.php', 'My sites', 'sites', (int) $unread->fetchColumn()]];
+    $items = [['dashboard.php', 'My sites', 'sites', 0], ['inbox.php', 'Inbox', 'inbox', (int) $unread->fetchColumn()]];
     $items[] = ['domains.php', 'Domains', 'globe', 0];
     if (zoho_mail_enabled()) {
         $items[] = ['email.php', 'Email', 'mail', 0];
@@ -118,7 +118,7 @@ function portal_shell_open(array $user, string $current, ?array $flash): void
     </button>
     <nav class="sb-nav" aria-label="Main">
       <?php foreach ($nav as [$href, $label, $ico, $badge]): ?>
-        <a href="<?= h(base_url($href)) ?>"<?= $current === $href || ($href === 'dashboard.php' && in_array($current, ['editor.php', 'inbox.php'], true)) ? ' aria-current="page"' : '' ?> title="<?= h($label) ?>">
+        <a href="<?= h(base_url($href)) ?>"<?= $current === $href || ($href === 'dashboard.php' && $current === 'editor.php') ? ' aria-current="page"' : '' ?> title="<?= h($label) ?>">
           <?= icon($ico) ?><span class="sb-label"><?= h($label) ?></span>
           <?php if ($badge): ?><span class="sb-badge" aria-label="<?= $badge ?> unread"><?= $badge ?></span><?php endif; ?>
         </a>

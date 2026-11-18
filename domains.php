@@ -134,57 +134,76 @@ $money = fn (int $cents) => '$' . number_format($cents / 100, 2);
 $err = fn ($k) => isset($errors[$k]) ? '<span class="field-error">' . h($errors[$k]) . '</span>' : '';
 $nameParts = explode(' ', (string) $user['name'], 2);
 
+$statusTag = function (array $o): string {
+    return match ($o['status']) {
+        'active' => '<span class="tag tag-ok">' . icon('check') . 'Connected</span>',
+        'failed' => '<span class="tag tag-err">Problem: our team is on it</span>',
+        'expiring' => '<span class="tag">Won\'t renew</span>',
+        default => '<span class="tag tag-accent">Setting up…</span>',
+    };
+};
 page_header('Domains');
 ?>
-<div class="page">
-  <p class="eyebrow">Domains</p>
-  <h1>Find your domain</h1>
+<div class="pg">
+  <div class="pg-head"><div><h1>Domains</h1><p class="muted">Your website's address on the internet.</p></div></div>
   <?php if (!$ready): ?>
     <div class="notice">Domain sales are coming soon. In the meantime you can connect a domain you already own from your website's Settings.</div>
   <?php else: ?>
     <?php if (registrar_is_sandbox() && is_staff($user)): ?><p class="notice small">Test mode: domains come from Name.com's sandbox and aren't real.</p><?php endif; ?>
-    <form method="get" class="domain-search">
-      <input name="q" value="<?= h($q) ?>" placeholder="yourbusiness" maxlength="70" aria-label="Domain name" required>
-      <button class="btn btn-accent">Search</button>
-    </form>
-    <?= $err('search') ?>
+    <section class="box hero-box">
+      <form method="get" class="dsearch" role="search">
+        <label for="dsearch" class="dsearch-label">Find your perfect domain</label>
+        <div class="dsearch-row">
+          <span class="dsearch-field"><?= icon('search') ?><input id="dsearch" name="q" value="<?= h($q) ?>" placeholder="Try mariasbakery" maxlength="70" required autocomplete="off"></span>
+          <button class="btn btn-accent">Search</button>
+        </div>
+      </form>
+      <?= $err('search') ?>
 
-    <?php if ($results): ?>
-      <div class="table-wrap domain-results"><table>
-        <?php foreach ($results as $r): ?>
-          <tr>
-            <td><strong><?= h($r['domain']) ?></strong></td>
-            <?php if ($r['available']): ?>
-              <td><?= h($money($r['price_cents'])) ?>/year</td>
-              <td><?= $canBuy ? '<a class="btn btn-sm" href="' . h(base_url('domains.php?buy=' . rawurlencode($r['domain']))) . '">Buy</a>'
-                  : '<a class="btn btn-ghost btn-sm" href="' . h(base_url('billing.php')) . '">Upgrade to buy</a>' ?></td>
-            <?php else: ?>
-              <td class="muted">Taken</td><td></td>
-            <?php endif; ?>
-          </tr>
-        <?php endforeach; ?>
-      </table></div>
-      <p class="muted small">Prices include registration, yearly renewal, DNS setup, and connecting it to your website<?= hosting()->offersEmail() ? ' and email' : '' ?>.</p>
-    <?php endif; ?>
+      <?php if ($results): ?>
+        <ul class="dresults" aria-live="polite">
+          <?php $best = true; foreach ($results as $r): ?>
+            <li class="<?= $r['available'] ? '' : 'is-taken' ?>">
+              <span class="dname"><?= $r['available'] ? icon('check') : icon('x') ?><span><?= h($r['domain']) ?></span>
+                <?php if ($r['available'] && $best): $best = false; ?><span class="tag tag-accent">Best match</span><?php endif; ?></span>
+              <?php if ($r['available']): ?>
+                <span class="dbuy"><span><strong><?= h($money($r['price_cents'])) ?></strong>/yr</span>
+                  <?= $canBuy ? '<a class="btn btn-accent btn-sm" href="' . h(base_url('domains.php?q=' . rawurlencode($q) . '&buy=' . rawurlencode($r['domain']) . '#buy')) . '">Buy</a>'
+                    : '<a class="btn btn-ghost btn-sm" href="' . h(base_url('billing.php')) . '">Upgrade to buy</a>' ?></span>
+              <?php else: ?>
+                <span class="muted small">Taken</span>
+              <?php endif; ?>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+        <p class="muted small">Prices include registration, yearly renewal, DNS setup, and connecting it to your website<?= hosting()->offersEmail() ? ' and email' : '' ?>. Privacy protection is free where the ending allows it.</p>
+      <?php endif; ?>
+    </section>
 
     <?php if ($buyQuote && $buyQuote['available']): ?>
-      <div class="card" id="buy">
-        <h2>Buy <?= h($buy) ?> · <?= h($money($buyQuote['price_cents'])) ?>/year</h2>
+      <section class="box checkout" id="buy">
+        <div class="checkout-sum">
+          <h2>Checkout</h2>
+          <div class="sum-row"><span><?= h($buy) ?> · 1 year</span><span><?= h($money($buyQuote['price_cents'])) ?></span></div>
+          <div class="sum-row muted"><span>Privacy protection</span><span>Free</span></div>
+          <div class="sum-row muted"><span>Renews yearly, cancel any time</span><span></span></div>
+          <div class="sum-row sum-total"><span>Total today</span><span><?= h($money($buyQuote['price_cents'])) ?></span></div>
+        </div>
         <p class="muted small">Domain registries require the owner's contact details. They're kept private where the domain ending allows it.</p>
         <?php if (isset($errors['form'])): ?><p class="error"><?= h($errors['form']) ?></p><?php endif; ?>
         <form method="post" class="form-2">
           <?= csrf_field() ?><input type="hidden" name="action" value="checkout"><input type="hidden" name="domain" value="<?= h($buy) ?>">
-          <label>First name <input name="first_name" required value="<?= h($_POST['first_name'] ?? $nameParts[0]) ?>"><?= $err('first_name') ?></label>
-          <label>Last name <input name="last_name" required value="<?= h($_POST['last_name'] ?? ($nameParts[1] ?? '')) ?>"><?= $err('last_name') ?></label>
-          <label>Business (optional) <input name="company" value="<?= h($_POST['company'] ?? '') ?>"></label>
-          <label>Email <input type="email" name="email" required value="<?= h($_POST['email'] ?? $user['email']) ?>"><?= $err('email') ?></label>
-          <label>Street address <input name="address1" required value="<?= h($_POST['address1'] ?? '') ?>"><?= $err('address1') ?></label>
-          <label>Apt, suite (optional) <input name="address2" value="<?= h($_POST['address2'] ?? '') ?>"></label>
-          <label>City <input name="city" required value="<?= h($_POST['city'] ?? '') ?>"><?= $err('city') ?></label>
-          <label>State <input name="state" maxlength="60" placeholder="MD" value="<?= h($_POST['state'] ?? '') ?>"><?= $err('state') ?></label>
-          <label>ZIP code <input name="zip" required value="<?= h($_POST['zip'] ?? '') ?>"><?= $err('zip') ?></label>
-          <label>Country <input name="country" maxlength="2" value="<?= h($_POST['country'] ?? 'US') ?>"><?= $err('country') ?></label>
-          <label>Phone <input type="tel" name="phone" required placeholder="410-555-1234" value="<?= h($_POST['phone'] ?? '') ?>"><?= $err('phone') ?></label>
+          <label>First name <input name="first_name" required value="<?= h($_POST['first_name'] ?? $nameParts[0]) ?>" autocomplete="given-name"><?= $err('first_name') ?></label>
+          <label>Last name <input name="last_name" required value="<?= h($_POST['last_name'] ?? ($nameParts[1] ?? '')) ?>" autocomplete="family-name"><?= $err('last_name') ?></label>
+          <label>Business (optional) <input name="company" value="<?= h($_POST['company'] ?? '') ?>" autocomplete="organization"></label>
+          <label>Email <input type="email" name="email" required value="<?= h($_POST['email'] ?? $user['email']) ?>" autocomplete="email"><?= $err('email') ?></label>
+          <label>Street address <input name="address1" required value="<?= h($_POST['address1'] ?? '') ?>" autocomplete="address-line1"><?= $err('address1') ?></label>
+          <label>Apt, suite (optional) <input name="address2" value="<?= h($_POST['address2'] ?? '') ?>" autocomplete="address-line2"></label>
+          <label>City <input name="city" required value="<?= h($_POST['city'] ?? '') ?>" autocomplete="address-level2"><?= $err('city') ?></label>
+          <label>State <input name="state" maxlength="60" placeholder="MD" value="<?= h($_POST['state'] ?? '') ?>" autocomplete="address-level1"><?= $err('state') ?></label>
+          <label>ZIP code <input name="zip" required value="<?= h($_POST['zip'] ?? '') ?>" autocomplete="postal-code"><?= $err('zip') ?></label>
+          <label>Country <input name="country" maxlength="2" value="<?= h($_POST['country'] ?? 'US') ?>" autocomplete="country"><?= $err('country') ?></label>
+          <label>Phone <input type="tel" name="phone" required placeholder="410-555-1234" value="<?= h($_POST['phone'] ?? '') ?>" autocomplete="tel"><?= $err('phone') ?></label>
           <label>Show this website on it
             <select name="site_id">
               <option value="">Not yet, I'll connect it later</option>
@@ -193,7 +212,7 @@ page_header('Domains');
           </label>
           <button class="btn btn-lg btn-accent btn-block">Continue to payment</button>
         </form>
-      </div>
+      </section>
     <?php elseif ($buy !== '' && $canBuy): ?>
       <p class="error"><?= h($buy) ?> isn't available. Try another name.</p>
     <?php elseif (!$canBuy): ?>
@@ -201,30 +220,35 @@ page_header('Domains');
     <?php endif; ?>
   <?php endif; ?>
 
-  <?php if ($orders): ?>
-    <h2 class="m-gap">Your domains</h2>
-    <div class="table-wrap"><table>
-      <tr><th>Domain</th><th>Status</th><th>Renews</th><th></th></tr>
+  <h2 class="pg-h2">My domains</h2>
+  <?php if (!$orders): ?>
+    <div class="box empty"><span class="empty-icon"><?= icon('globe') ?></span><h2>No domains yet</h2>
+      <p class="muted"><?= $ready ? 'Search above to find one you love.' : 'Domains you buy will show up here.' ?> Already own one? Connect it from your website's Settings.</p></div>
+  <?php else: ?>
+    <div class="dlist">
       <?php foreach ($orders as $o): ?>
-        <tr>
-          <td><strong><?= h($o['domain']) ?></strong><?= $o['site_name'] ? '<br><span class="muted small">Shows ' . h($o['site_name']) . '</span>' : '' ?></td>
-          <td><?= h(['registering' => 'Setting up…', 'registered' => 'Setting up…', 'active' => 'Active', 'setup_failed' => 'Setting up…',
-              'failed' => 'Problem: our team is on it', 'expiring' => 'Won\'t renew'][$o['status']] ?? $o['status']) ?></td>
-          <td><?= $o['expires_at'] ? h(date('M j, Y', strtotime($o['expires_at'] . ' UTC'))) : '' ?><?= $o['autorenew'] ? '' : ' <span class="muted small">(expires)</span>' ?></td>
-          <td><?php if ($o['stripe_subscription_id'] && in_array($o['status'], ['active', 'registered', 'setup_failed', 'expiring'], true)): ?>
-            <form method="post"><?= csrf_field() ?><input type="hidden" name="order_id" value="<?= (int) $o['id'] ?>">
-              <?php if ($o['autorenew']): ?>
-                <input type="hidden" name="action" value="autorenew_off"><button class="link small" onclick="return confirm('Turn off auto-renew? The domain will expire at the end of its year and could be bought by someone else.')">Turn off auto-renew</button>
-              <?php else: ?>
-                <input type="hidden" name="action" value="autorenew_on"><button class="link small">Turn on auto-renew</button>
-              <?php endif; ?>
+        <section class="box drow">
+          <span class="tile"><?= icon('globe') ?></span>
+          <div class="drow-main">
+            <strong><?= h($o['domain']) ?></strong>
+            <div class="tags">
+              <?= $statusTag($o) ?>
+              <?php if ($o['expires_at']): ?><span class="tag"><?= $o['autorenew'] ? 'Renews' : 'Expires' ?> <?= h(date('M j, Y', strtotime($o['expires_at'] . ' UTC'))) ?></span><?php endif; ?>
+              <?php if ($o['site_name']): ?><span class="tag">Shows <?= h($o['site_name']) ?></span><?php endif; ?>
+            </div>
+          </div>
+          <?php if ($o['stripe_subscription_id'] && in_array($o['status'], ['active', 'registered', 'setup_failed', 'expiring'], true)): ?>
+            <form method="post" class="switch-form"<?= $o['autorenew'] ? ' data-confirm="Turn off auto-renew? The domain will expire at the end of its year and could be bought by someone else."' : '' ?>>
+              <?= csrf_field() ?><input type="hidden" name="order_id" value="<?= (int) $o['id'] ?>">
+              <input type="hidden" name="action" value="<?= $o['autorenew'] ? 'autorenew_off' : 'autorenew_on' ?>">
+              <button class="switch" role="switch" aria-checked="<?= $o['autorenew'] ? 'true' : 'false' ?>"><span class="switch-label">Auto-renew</span><span class="switch-track" aria-hidden="true"><i></i></span></button>
             </form>
-          <?php endif; ?></td>
-        </tr>
+          <?php endif; ?>
+        </section>
       <?php endforeach; ?>
-    </table></div>
+    </div>
     <?php if (hosting()->offersEmail()): ?>
-    <p class="muted small">Manage email accounts and DNS for your domains from your <a href="<?= h(base_url('dashboard.php')) ?>">dashboard</a>.</p>
+    <p class="muted small">Set up email for your domains on the <a class="link-accent" href="<?= h(base_url('email.php')) ?>">Email</a> page.</p>
     <?php endif; ?>
   <?php endif; ?>
 </div>

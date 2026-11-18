@@ -81,55 +81,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $used = ai_uses_this_month((int) $user['id']);
-page_header('Account');
+$limit = max(1, ai_limit($user));
+$siteCount = (int) db()->query('SELECT COUNT(*) FROM sites WHERE user_id = ' . (int) $user['id'])->fetchColumn();
+page_header('Settings');
 ?>
-<div class="page narrow">
-  <h1>Account</h1>
-  <?php if ($error): ?><p class="error"><?= h($error) ?></p><?php endif; ?>
+<div class="pg pg-narrow">
+  <div class="pg-head"><div><h1>Settings</h1><p class="muted">Your profile, sign-in and account.</p></div></div>
+  <?php if ($error): ?><p class="error" role="alert"><?= h($error) ?></p><?php endif; ?>
 
-  <div class="card">
+  <section class="box">
     <h2>Profile</h2>
-    <form method="post">
+    <form method="post" class="grid-2">
       <?= csrf_field() ?><input type="hidden" name="action" value="profile">
-      <label>Name <input name="name" required maxlength="100" value="<?= h($user['name']) ?>"></label>
-      <button class="btn">Save</button>
+      <label>Full name <input name="name" required maxlength="100" value="<?= h($user['name']) ?>" autocomplete="name"></label>
+      <div class="grid-2-end"><button class="btn">Save profile</button></div>
     </form>
-  </div>
+  </section>
 
-  <div class="card">
+  <section class="box">
     <h2>Email address</h2>
-    <p class="muted small">Currently <strong><?= h($user['email']) ?></strong><?= is_verified($user) ? '' : ' (not confirmed yet)' ?></p>
-    <form method="post">
+    <p class="muted small">You sign in with <strong><?= h($user['email']) ?></strong><?= is_verified($user) ? '' : ' <span class="tag tag-accent">Not confirmed yet</span>' ?></p>
+    <form method="post" class="grid-2">
       <?= csrf_field() ?><input type="hidden" name="action" value="email">
       <label>New email <input type="email" name="email" required maxlength="200" autocomplete="email"></label>
       <label>Your password <input type="password" name="email_password" required autocomplete="current-password"></label>
-      <button class="btn">Change email</button>
+      <div><button class="btn">Change email</button></div>
     </form>
-  </div>
+  </section>
 
-  <div class="card">
-    <h2>AI usage</h2>
-    <p>You've used <strong><?= $used ?></strong> of <strong><?= ai_limit($user) ?></strong> AI designs and edits this month. Your allowance resets on the 1st.</p>
-  </div>
-
-  <div class="card">
-    <h2>Change password</h2>
-    <form method="post">
+  <section class="box">
+    <h2>Password</h2>
+    <form method="post" class="grid-2">
       <?= csrf_field() ?><input type="hidden" name="action" value="password">
       <label>Current password <input type="password" name="current_password" required autocomplete="current-password"></label>
-      <label>New password <input type="password" name="new_password" required minlength="8" autocomplete="new-password"></label>
-      <button class="btn">Change password</button>
+      <label>New password <input type="password" name="new_password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
+      <div><button class="btn">Update password</button></div>
     </form>
-  </div>
+    <p class="muted small">Changing your password signs you out on your other devices.</p>
+  </section>
 
-  <div class="card danger">
+  <section class="box">
+    <h2>AI usage this month</h2>
+    <div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="<?= $limit ?>" aria-valuenow="<?= min($used, $limit) ?>" aria-label="AI designs and edits used"><span style="width: <?= min(100, round($used / $limit * 100)) ?>%"></span></div>
+    <p class="small"><strong><?= $used ?></strong> of <strong><?= ai_limit($user) ?></strong> AI designs and edits used. Your allowance resets on the 1st. <a class="link-accent" href="<?= h(base_url('billing.php')) ?>">Need more?</a></p>
+  </section>
+
+  <section class="box box-danger">
     <h2>Delete account</h2>
-    <p class="muted">This permanently deletes your account, all of your websites, images and messages. Your sites go offline right away.</p>
-    <form method="post" onsubmit="return confirm('Delete your account and all websites forever?')">
+    <p class="muted">This permanently deletes your account<?= $siteCount ? ', your ' . $siteCount . ' website' . ($siteCount > 1 ? 's' : '') : '' ?>, images and messages. Your sites go offline right away and can't be recovered.</p>
+    <button type="button" class="btn btn-danger" data-dialog-open="delete-dialog">Delete my account</button>
+  </section>
+
+  <dialog class="dlg" id="delete-dialog" aria-labelledby="delete-title">
+    <form method="post" data-type-confirm="DELETE">
       <?= csrf_field() ?><input type="hidden" name="action" value="delete">
+      <h2 id="delete-title">Delete your account?</h2>
+      <p class="muted"><?= $siteCount ? 'Your ' . $siteCount . ' website' . ($siteCount > 1 ? 's' : '') . ' will go offline and ' : 'Everything ' ?>can't be recovered. Type <strong>DELETE</strong> and enter your password to confirm.</p>
+      <label>Type DELETE <input name="confirm_word" autocomplete="off" placeholder="DELETE" data-type-input></label>
       <label>Password <input type="password" name="confirm_password" required autocomplete="current-password"></label>
-      <button class="btn btn-danger">Delete my account</button>
+      <div class="dlg-foot">
+        <button type="button" class="btn btn-ghost" data-dialog-close>Keep my account</button>
+        <button class="btn btn-danger" data-type-submit disabled>Delete forever</button>
+      </div>
     </form>
-  </div>
+  </dialog>
 </div>
 <?php page_footer();

@@ -130,90 +130,124 @@ $domains = zoho_mail_enabled() ? user_mail_domains($uid) : [];
 $used = zoho_mail_enabled() ? count_user_mailboxes($uid) : 0;
 $limit = max_mailboxes($user);
 page_header('Email');
+$tick = fn (bool $ok, string $label) => '<span class="tag ' . ($ok ? 'tag-ok' : 'tag-accent') . '">' . ($ok ? icon('check') : '') . h($label) . '</span>';
 ?>
-<div class="page">
-  <h1>Email</h1>
+<div class="pg">
+  <div class="pg-head">
+    <div><h1>Email</h1><p class="muted">Look professional with email on your own domain, like <strong>you@yourbusiness.com</strong>.</p></div>
+    <?php if (zoho_mail_enabled() && $domains): ?>
+      <div class="pg-actions"><a class="btn btn-ghost" href="<?= h(zoho_mail_webmail_url()) ?>" target="_blank" rel="noopener"><?= icon('external') ?> Open webmail</a></div>
+    <?php endif; ?>
+  </div>
+
   <?php if (!zoho_mail_enabled()): ?>
-    <p class="notice">Email accounts aren't available yet. Please check back soon.</p>
+    <div class="box empty"><span class="empty-icon"><?= icon('mail') ?></span><h2>Coming soon</h2><p class="muted">Email accounts aren't available yet. Please check back soon.</p></div>
   <?php else: ?>
-    <p class="muted">Professional email on your own domain, like <strong>you@yourbusiness.com</strong>. Read it at
-      <a href="<?= h(zoho_mail_webmail_url()) ?>" target="_blank" rel="noopener"><?= h(parse_url(zoho_mail_webmail_url(), PHP_URL_HOST)) ?></a>
-      or in the free Zoho Mail app. You're using <?= $used ?> of <?= $limit ?> email accounts on your plan.</p>
+    <?php if ($limit > 0): ?>
+    <section class="box usage-bar">
+      <div>
+        <strong><?= $used ?> of <?= $limit ?> email account<?= $limit === 1 ? '' : 's' ?> used</strong>
+        <div class="meter"><span style="width: <?= min(100, round($used / max(1, $limit) * 100)) ?>%"></span></div>
+      </div>
+      <p class="muted small">Read your email at <a href="<?= h(zoho_mail_webmail_url()) ?>" target="_blank" rel="noopener"><?= h(parse_url(zoho_mail_webmail_url(), PHP_URL_HOST)) ?></a> or in the free Zoho Mail app.<?php if ($used >= $limit): ?> Need more? <a class="link-accent" href="<?= h(base_url('billing.php')) ?>">Upgrade your plan</a>.<?php endif; ?></p>
+    </section>
+    <?php endif; ?>
 
-    <?php foreach ($domains as $md): $accounts = mail_domain_accounts((int) $md['id']); ?>
-      <div class="card">
-        <h2><?= h($md['domain']) ?></h2>
-        <p class="small">
-          <span class="badge <?= $md['verified'] ? 'badge-live' : '' ?>"><?= $md['verified'] ? 'Verified' : 'Not verified yet' ?></span>
-          <?php if ($md['verified']): ?>
-            <span class="badge <?= $md['mx_ok'] ? 'badge-live' : '' ?>">Receiving <?= $md['mx_ok'] ? '✓' : '✗' ?></span>
-            <span class="badge <?= $md['spf_ok'] ? 'badge-live' : '' ?>">SPF <?= $md['spf_ok'] ? '✓' : '✗' ?></span>
-            <span class="badge <?= $md['dkim_ok'] ? 'badge-live' : '' ?>">DKIM <?= $md['dkim_ok'] ? '✓' : '✗' ?></span>
+    <?php foreach ($domains as $md): $accounts = mail_domain_accounts((int) $md['id']); $allOk = $md['verified'] && $md['mx_ok'] && $md['spf_ok'] && $md['dkim_ok']; ?>
+      <section class="box mail-domain">
+        <div class="mail-domain-head">
+          <span class="tile"><?= icon('globe') ?></span>
+          <div>
+            <h2><?= h($md['domain']) ?></h2>
+            <div class="tags">
+              <?= $tick((bool) $md['verified'], $md['verified'] ? 'Verified' : 'Not verified yet') ?>
+              <?php if ($md['verified']): ?>
+                <?= $tick((bool) $md['mx_ok'], 'Receiving') ?><?= $tick((bool) $md['spf_ok'], 'SPF') ?><?= $tick((bool) $md['dkim_ok'], 'DKIM') ?>
+              <?php endif; ?>
+            </div>
+          </div>
+          <?php if ($md['verified'] && $used < $limit): ?>
+            <button type="button" class="btn btn-accent btn-sm" data-dialog-open="new-mail-<?= (int) $md['id'] ?>"><?= icon('plus') ?> Add email account</button>
           <?php endif; ?>
-        </p>
+        </div>
 
-        <?php if (!$md['verified'] || !$md['mx_ok'] || !$md['spf_ok'] || !$md['dkim_ok']): ?>
-          <details <?= $md['verified'] ? '' : 'open' ?>>
+        <?php if (!$allOk): ?>
+          <details class="dns-box" <?= $md['verified'] ? '' : 'open' ?>>
             <summary>DNS records to add <?= domain_was_bought((string) $md['domain']) ? '(we add these for you)' : 'where your domain\'s DNS is managed' ?></summary>
-            <div class="table-wrap"><table>
-              <tr><th>Type</th><th>Host</th><th>Value</th><th>Priority</th><th></th></tr>
+            <div class="table-scroll"><table class="tbl">
+              <thead><tr><th>Type</th><th>Host</th><th>Value</th><th>Priority</th><th>For</th></tr></thead>
+              <tbody>
               <?php foreach (zoho_mail_dns_records($md['verified'] ? '' : (string) $md['verify_code'], $md['dkim_selector'], $md['dkim_value']) as $r): ?>
                 <tr><td><?= h($r['type']) ?></td><td><code><?= h($r['host']) ?></code></td><td><code class="wrap"><?= h($r['value']) ?></code></td>
                   <td><?= h((string) ($r['priority'] ?? '')) ?></td><td class="muted small"><?= h($r['purpose']) ?></td></tr>
               <?php endforeach; ?>
+              </tbody>
             </table></div>
             <p class="muted small">Remove any MX records from your old email provider. DNS changes can take up to an hour.</p>
           </details>
           <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="check"><input type="hidden" name="domain_id" value="<?= (int) $md['id'] ?>">
-            <button class="btn btn-sm">Check DNS</button></form>
+            <button class="btn btn-sm">Check DNS now</button></form>
         <?php endif; ?>
 
         <?php if ($md['verified']): ?>
-          <h3>Email accounts</h3>
-          <?php if (!$accounts): ?><p class="muted small">None yet.</p><?php endif; ?>
+          <?php if (!$accounts): ?>
+            <p class="muted small">No email accounts yet. Create one like hello@<?= h($md['domain']) ?>.</p>
+          <?php endif; ?>
+          <ul class="mailboxes">
           <?php foreach ($accounts as $a): ?>
-            <div class="mailbox-row">
-              <strong><?= h($a['email']) ?></strong> <span class="muted small"><?= h($a['name']) ?></span>
-              <form method="post" class="inline"><?= csrf_field() ?><input type="hidden" name="action" value="password"><input type="hidden" name="account_id" value="<?= (int) $a['id'] ?>">
-                <input type="password" name="password" minlength="10" placeholder="New password" autocomplete="new-password" required>
-                <button class="btn btn-ghost btn-sm">Change password</button></form>
-              <form method="post" class="inline" onsubmit="return confirm('Delete <?= h($a['email']) ?> and all of its email? This can\'t be undone.')"><?= csrf_field() ?>
-                <input type="hidden" name="action" value="delete"><input type="hidden" name="account_id" value="<?= (int) $a['id'] ?>">
-                <button class="btn btn-ghost btn-sm">Delete</button></form>
-            </div>
+            <li>
+              <span class="avatar" aria-hidden="true"><?= h(strtoupper(substr($a['email'], 0, 1))) ?></span>
+              <div class="mailbox-who"><strong><?= h($a['email']) ?></strong><?php if ($a['name']): ?><span class="muted small"><?= h($a['name']) ?></span><?php endif; ?></div>
+              <details class="menu menu-down">
+                <summary class="btn btn-ghost btn-sm" aria-label="Options for <?= h($a['email']) ?>"><?= icon('more') ?></summary>
+                <div class="menu-list menu-pop">
+                  <form method="post" class="menu-form"><?= csrf_field() ?><input type="hidden" name="action" value="password"><input type="hidden" name="account_id" value="<?= (int) $a['id'] ?>">
+                    <label>New password <input type="password" name="password" minlength="10" required autocomplete="new-password" placeholder="At least 10 characters"></label>
+                    <button class="btn btn-sm btn-block">Change password</button></form>
+                  <form method="post" data-confirm="Delete <?= h($a['email']) ?> and all of its email? This can't be undone."><?= csrf_field() ?>
+                    <input type="hidden" name="action" value="delete"><input type="hidden" name="account_id" value="<?= (int) $a['id'] ?>">
+                    <button class="menu-danger">Delete this account</button></form>
+                </div>
+              </details>
+            </li>
           <?php endforeach; ?>
-          <?php if ($used < $limit): ?>
-            <form method="post" class="mailbox-new"><?= csrf_field() ?><input type="hidden" name="action" value="create"><input type="hidden" name="domain_id" value="<?= (int) $md['id'] ?>">
-              <label>New address <span class="addr"><input name="local" maxlength="64" required placeholder="info"><span>@<?= h($md['domain']) ?></span></span></label>
-              <label>Name <input name="name" maxlength="100" placeholder="Jane Smith"></label>
-              <label>Password <input type="password" name="password" minlength="10" required autocomplete="new-password"></label>
-              <button class="btn btn-sm">Create email account</button>
-            </form>
+          </ul>
+          <?php if ($used >= $limit): ?>
+            <p class="muted small">You've used all <?= $limit ?> email accounts on your plan. <a class="link-accent" href="<?= h(base_url('billing.php')) ?>">Upgrade</a> for more.</p>
           <?php else: ?>
-            <p class="muted small">You've used all <?= $limit ?> email accounts on your plan. <a href="<?= h(base_url('billing.php')) ?>">Upgrade</a> for more.</p>
+            <dialog class="dlg" id="new-mail-<?= (int) $md['id'] ?>" aria-label="Add an email account">
+              <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="create"><input type="hidden" name="domain_id" value="<?= (int) $md['id'] ?>">
+                <h2>Add an email account</h2>
+                <label>Email address <span class="addr"><input name="local" maxlength="64" required placeholder="hello"><span>@<?= h($md['domain']) ?></span></span></label>
+                <label>Name <input name="name" maxlength="100" placeholder="Jane Smith"></label>
+                <label>Password <input type="password" name="password" minlength="10" required autocomplete="new-password" placeholder="At least 10 characters"></label>
+                <div class="dlg-foot"><button type="button" class="btn btn-ghost" data-dialog-close>Cancel</button><button class="btn btn-accent">Create account</button></div>
+              </form>
+            </dialog>
           <?php endif; ?>
         <?php endif; ?>
 
         <?php if (!$accounts): ?>
-          <form method="post" onsubmit="return confirm('Stop using <?= h($md['domain']) ?> for email?')"><?= csrf_field() ?>
+          <form method="post" data-confirm="Stop using <?= h($md['domain']) ?> for email?"><?= csrf_field() ?>
             <input type="hidden" name="action" value="remove_domain"><input type="hidden" name="domain_id" value="<?= (int) $md['id'] ?>">
             <button class="link small">Remove this domain</button></form>
         <?php endif; ?>
-      </div>
+      </section>
     <?php endforeach; ?>
 
-    <div class="card">
-      <h2>Set up email on a domain</h2>
+    <section class="box<?= $domains ? '' : ' hero-box' ?>">
+      <h2><?= $domains ? 'Set up email on another domain' : 'Set up email on your domain' ?></h2>
       <?php if ($limit === 0): ?>
-        <p class="muted">Email accounts are included in our paid plans. <a href="<?= h(base_url('billing.php')) ?>">See plans</a>.</p>
+        <p class="muted">Email accounts are included in our paid plans. <a class="link-accent" href="<?= h(base_url('billing.php')) ?>">See plans</a></p>
       <?php else: ?>
-        <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="add_domain">
-          <label>Your domain <input name="domain" maxlength="253" required placeholder="mybakery.com"></label>
-          <button class="btn">Set up email</button>
+        <form method="post" class="inline-form"><?= csrf_field() ?><input type="hidden" name="action" value="add_domain">
+          <label class="sr-only" for="mail-domain">Your domain</label>
+          <input id="mail-domain" name="domain" maxlength="253" required placeholder="mybakery.com">
+          <button class="btn btn-accent">Set up email</button>
         </form>
-        <p class="muted small">Don't have a domain? <a href="<?= h(base_url('domains.php')) ?>">Get one here</a>, and we'll set up its email records for you.</p>
+        <p class="muted small">Don't have a domain? <a class="link-accent" href="<?= h(base_url('domains.php')) ?>">Get one here</a>, and we'll set up its email records for you.</p>
       <?php endif; ?>
-    </div>
+    </section>
   <?php endif; ?>
 </div>
 <?php page_footer();
