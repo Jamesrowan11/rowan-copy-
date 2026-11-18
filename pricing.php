@@ -32,7 +32,7 @@ page_header('Pricing', 'public', 'Website builder, hosting and email plans bille
         <?php if ($key === 'business'): ?><span class="m-pill m-popular">Most popular</span><?php endif; ?>
         <h3><?= h($plan['name']) ?></h3>
         <p class="plan-price"><?= h($interval === 'year' && !empty($plan['price_yearly']) ? $plan['price_yearly'] : ($plan['price'] ?? '')) ?></p>
-        <ul><?php foreach ((array) ($plan['features'] ?? []) as $f): ?><li><?= h($f) ?></li><?php endforeach; ?></ul>
+        <ul><?php foreach (plan_features((string) $key, (array) $plan) as $f): ?><li><?= h($f) ?></li><?php endforeach; ?></ul>
         <a class="btn btn-block <?= $key === 'business' ? 'btn-accent' : '' ?>" href="<?= h(base_url($key === 'free' ? 'register.php' : 'billing.php?interval=' . $interval)) ?>"><?= $key === 'free' ? 'Start free' : 'Choose ' . h($plan['name']) ?></a>
       </div>
     <?php endforeach; ?>

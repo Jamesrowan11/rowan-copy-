@@ -179,7 +179,7 @@ page_header('Billing');
         <h3><?= h($plan['name']) ?></h3>
         <p class="plan-price"><?= h($interval === 'year' && !empty($plan['price_yearly']) ? $plan['price_yearly'] : ($plan['price'] ?? '')) ?></p>
         <ul>
-          <?php foreach ((array) ($plan['features'] ?? []) as $f): ?><li><?= h($f) ?></li><?php endforeach; ?>
+          <?php foreach (plan_features((string) $key, (array) $plan) as $f): ?><li><?= h($f) ?></li><?php endforeach; ?>
         </ul>
         <?php if ($key === $current && (!$hasSub || $interval === $currentInterval)): ?>
           <span class="badge badge-live">Current plan</span>
