@@ -26,6 +26,7 @@ require_once __DIR__ . '/hosting.php';
 require_once __DIR__ . '/mailer.php';
 require_once __DIR__ . '/zoho.php';
 require_once __DIR__ . '/zohomail.php';
+require_once __DIR__ . '/mailbilling.php';
 require_once RC_ROOT . '/vendor/autoload.php';
 
 function cfg(string $key, mixed $default = null): mixed
@@ -248,6 +249,15 @@ function migrate(PDO $pdo): void
         zuid TEXT NOT NULL DEFAULT \'\',
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )');
+    // Paid email accounts (lib/mailbilling.php). Accounts made before email was
+    // billed keep billed = 0 until staff start billing them.
+    add_column($pdo, 'mail_accounts', 'tier', "TEXT NOT NULL DEFAULT 'lite'");      // lite | premium
+    add_column($pdo, 'mail_accounts', 'billed', 'INTEGER NOT NULL DEFAULT 0');
+    add_column($pdo, 'mail_accounts', 'zoho_tier', "TEXT NOT NULL DEFAULT 'lite'"); // what staff set in Zoho
+    add_column($pdo, 'users', 'mail_subscription_id', 'TEXT');
+    add_column($pdo, 'users', 'mail_subscription_status', 'TEXT');
+    add_column($pdo, 'users', 'mail_billing_from', 'TEXT'); // when billing old accounts starts (UTC)
+    $pdo->exec('CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL)');
 }
 
 /** Add a column if it doesn't exist yet. Returns true when it was added. */
@@ -295,7 +305,8 @@ function current_user(): ?array
         return $user = null;
     }
     $stmt = db()->prepare('SELECT id, email, name, created_at, email_verified_at, session_version, suspended, ai_limit_override,
-        plan, plan_source, stripe_customer_id, subscription_status, plan_renews_at, plan_cancels, role FROM users WHERE id = ?');
+        plan, plan_source, stripe_customer_id, subscription_status, plan_renews_at, plan_cancels, role,
+        mail_subscription_id, mail_subscription_status FROM users WHERE id = ?');
     $stmt->execute([$id]);
     $row = $stmt->fetch();
     // A password change or reset bumps session_version, which logs out every other device.

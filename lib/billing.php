@@ -62,6 +62,14 @@ function can_edit_code(?array $user): bool
 function plan_features(string $key, array $plan): array
 {
     $features = array_values(array_map('strval', (array) ($plan['features'] ?? [])));
+    // Email accounts are paid separately now (lib/mailbilling.php), so plans no
+    // longer list a number of them.
+    $mailLine = 'Email accounts from ' . str_replace('/month', '', mail_tier_price('lite')) . '/month each';
+    $features = array_values(array_filter($features, fn ($f) => !preg_match('/\bemail accounts?\b/i', $f)));
+    if ($key !== 'free') {
+        $after = array_keys(preg_grep('/badge|domain/i', $features));
+        array_splice($features, $after ? end($after) + 1 : count($features), 0, [$mailLine]);
+    }
     $editsCode = array_key_exists('edit_code', $plan) ? (bool) $plan['edit_code'] : $key !== 'free';
     if (!$editsCode || preg_grep('/\bcode\b/i', $features)) {
         return $features;
@@ -161,6 +169,11 @@ function sync_subscription(\Stripe\Subscription $sub): void
     // Domain subscriptions are separate from website plans.
     if (($sub->metadata['rc_kind'] ?? '') === 'domain') {
         sync_domain_subscription($sub);
+        return;
+    }
+    // So are email accounts (lib/mailbilling.php).
+    if (($sub->metadata['rc_kind'] ?? '') === 'mail') {
+        sync_mail_subscription($sub);
         return;
     }
     $customerId = is_string($sub->customer) ? $sub->customer : $sub->customer->id;

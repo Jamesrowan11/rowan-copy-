@@ -46,6 +46,14 @@ page_header('Terms of Service');
   <h2>Fees</h2>
   <p>[Describe free plan limits, paid plans, billing and refunds here.]</p>
 
+  <h2 id="email-accounts">Email accounts</h2>
+  <p>Email accounts on your own domain are provided through Zoho Mail and billed monthly per account, separately from your website plan:
+    <?= h(mail_tiers()['lite']['name']) ?> (<?= h(mail_tiers()['lite']['storage']) ?>) is <?= h(mail_tier_price('lite')) ?> and
+    <?= h(mail_tiers()['premium']['name']) ?> (<?= h(mail_tiers()['premium']['storage']) ?>) is <?= h(mail_tier_price('premium')) ?>.
+    A new account, or an upgrade, is charged when you make it, for the rest of that month. When you delete an account or switch to the smaller kind,
+    you get credit for the rest of the month on your next bill. If your email bill goes unpaid, we may suspend or delete the accounts on it
+    after letting you know. Deleting an account deletes its email permanently.</p>
+
   <h2>Ending your account</h2>
   <p>You can delete your account at any time from the Account page, which removes your websites. We may end accounts that break these terms.</p>
 

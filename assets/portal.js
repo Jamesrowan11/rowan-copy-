@@ -61,6 +61,9 @@
     });
   });
   document.querySelectorAll('dialog.dlg').forEach(function (d) {
+    if (d.hasAttribute('data-open-on-load') && typeof d.showModal === 'function') {
+      d.showModal(); var pw = d.querySelector('input[type=password]'); if (pw) pw.focus();
+    }
     d.addEventListener('click', function (e) { if (e.target === d) d.close(); });
     d.querySelectorAll('[data-dialog-close]').forEach(function (b) { b.addEventListener('click', function () { d.close(); }); });
   });

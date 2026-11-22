@@ -24,7 +24,7 @@ const faqs = [
   ["What if I don't like the first draft?", "Every project includes a round of edits. Tell me what's off and I'll rework it until it sounds like you."],
   ["How does the website builder work?", "Describe your business in a few sentences, and the builder creates a first draft in minutes. Ask for changes in plain English, then publish with one click."],
   ["How do payments work?", "Payments are handled securely by Stripe. Pay monthly or yearly, and cancel anytime from Billing in your portal."],
-  ["Can I use my own domain and email?", "Yes. Paid plans let you connect your own domain and create email accounts on it, all managed in your portal."],
+  ["Can I use my own domain and email?", "Yes. Paid plans let you connect your own domain. Email accounts on it are $3 a month each (Mail Lite, 10 GB) or $7 (Mail Premium, 50 GB), managed in your portal."],
   ["Do you work outside Maryland?", "Yes. I'm based in Howard County, Maryland, and work remotely with small businesses across the U.S."],
 ];
 

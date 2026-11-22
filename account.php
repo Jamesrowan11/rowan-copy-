@@ -71,6 +71,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 array_map('unlink', glob(uploads_dir((int) $siteId) . '/*') ?: []);
                 @rmdir(uploads_dir((int) $siteId));
             }
+            try { // stop billing their email accounts
+                if ($mailSub = mail_subscription($user)) {
+                    stripe()->subscriptions->cancel($mailSub->id, ['prorate' => true, 'invoice_now' => true]);
+                }
+            } catch (Throwable $e) {
+                error_log('Rowan Copy: cancel email billing on account delete: ' . $e->getMessage());
+            }
             mail_cleanup_user((int) $user['id']); // their Zoho mailboxes and domains
             db()->prepare('DELETE FROM users WHERE id = ?')->execute([$user['id']]);
             $_SESSION = [];

@@ -135,7 +135,8 @@ page_header('Admin');
       <a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-domains.php')) ?>">Domains</a>
       <?php if ($isAdmin): ?><a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-team.php')) ?>">Team</a>
       <a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-email.php')) ?>">Email</a>
-      <a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-integrations.php')) ?>">Integrations</a><?php endif; ?>
+      <a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-integrations.php')) ?>">Integrations</a>
+      <a class="btn btn-ghost btn-sm" href="<?= h(base_url('admin-mailboxes.php')) ?>">Customer mailboxes</a><?php endif; ?>
     </div>
   </div>
   <?php if ($resetLink): ?>
