@@ -11,7 +11,7 @@ declare(strict_types=1);
 function is_portal_page(string $script): bool
 {
     return in_array($script, ['dashboard.php', 'editor.php', 'domains.php', 'domain.php', 'email.php', 'billing.php',
-        'referrals.php', 'account.php', 'inbox.php', 'admin.php'], true)
+        'referrals.php', 'account.php', 'inbox.php', 'admin.php', 'site-portal.php'], true)
         || str_starts_with($script, 'admin-');
 }
 
@@ -118,7 +118,7 @@ function portal_shell_open(array $user, string $current, ?array $flash): void
     </button>
     <nav class="sb-nav" aria-label="Main">
       <?php foreach ($nav as [$href, $label, $ico, $badge]): ?>
-        <a href="<?= h(base_url($href)) ?>"<?= $current === $href || ($href === 'dashboard.php' && $current === 'editor.php') ? ' aria-current="page"' : '' ?> title="<?= h($label) ?>">
+        <a href="<?= h(base_url($href)) ?>"<?= $current === $href || ($href === 'dashboard.php' && in_array($current, ['editor.php', 'site-portal.php'], true)) ? ' aria-current="page"' : '' ?> title="<?= h($label) ?>">
           <?= icon($ico) ?><span class="sb-label"><?= h($label) ?></span>
           <?php if ($badge): ?><span class="sb-badge" aria-label="<?= $badge ?> unread"><?= $badge ?></span><?php endif; ?>
         </a>

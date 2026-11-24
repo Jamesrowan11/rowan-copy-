@@ -183,6 +183,7 @@ page_header('My sites');
               <a href="<?= h(base_url('inbox.php?id=' . $s['id'])) ?>"><?= icon('inbox') ?> Messages</a>
               <?php if ($s['current_version_id']): ?><a href="<?= h(base_url('download.php?id=' . $s['id'])) ?>"><?= icon('download') ?> Download HTML</a><?php endif; ?>
               <a href="<?= h(base_url('editor.php?id=' . $s['id'])) ?>#settings"><?= icon('settings') ?> Site settings</a>
+              <a href="<?= h(base_url('site-portal.php?id=' . $s['id'])) ?>"><?= icon('shield') ?> Portal</a>
             </div>
           </details>
         </div>

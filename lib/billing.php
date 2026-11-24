@@ -176,6 +176,10 @@ function sync_subscription(\Stripe\Subscription $sub): void
         sync_mail_subscription($sub);
         return;
     }
+    if (($sub->metadata['rc_kind'] ?? '') === 'portal') {
+        sync_portal_subscription($sub);
+        return;
+    }
     $customerId = is_string($sub->customer) ? $sub->customer : $sub->customer->id;
     $stmt = db()->prepare('SELECT id, plan, plan_source, stripe_subscription_id FROM users WHERE stripe_customer_id = ?');
     $stmt->execute([$customerId]);

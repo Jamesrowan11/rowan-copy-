@@ -71,6 +71,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 array_map('unlink', glob(uploads_dir((int) $siteId) . '/*') ?: []);
                 @rmdir(uploads_dir((int) $siteId));
             }
+            try { // stop billing their website Portals
+                $portals = db()->prepare("SELECT portal_subscription_id FROM sites WHERE user_id = ? AND portal_status IN ('active', 'trialing', 'past_due')");
+                $portals->execute([$user['id']]);
+                foreach ($portals->fetchAll(PDO::FETCH_COLUMN) as $subId) {
+                    stripe()->subscriptions->cancel((string) $subId, ['prorate' => true, 'invoice_now' => true]);
+                }
+            } catch (Throwable $e) {
+                error_log('Rowan Copy: cancel portals on account delete: ' . $e->getMessage());
+            }
             try { // stop billing their email accounts
                 if ($mailSub = mail_subscription($user)) {
                     stripe()->subscriptions->cancel($mailSub->id, ['prorate' => true, 'invoice_now' => true]);
