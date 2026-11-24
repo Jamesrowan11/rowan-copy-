@@ -73,6 +73,7 @@ $targetIp = hosting()->targetIp();
         <div class="menu-list">
           <a id="menu-live" href="<?= h(public_url($site)) ?>" target="_blank" rel="noopener"><?= icon('external') ?> View live site</a>
           <a href="<?= h(base_url('inbox.php?id=' . $site['id'])) ?>"><?= icon('inbox') ?> Messages<?= $unread ? ' (' . $unread . ' new)' : '' ?></a>
+          <a href="<?= h(base_url('site-portal.php?id=' . $site['id'])) ?>"><?= icon('shield') ?> Portal<?= portal_live($site) ? '' : ' (add-on)' ?></a>
           <a href="<?= h(base_url('download.php?id=' . $site['id'])) ?>"><?= icon('download') ?> Download HTML</a>
           <a href="#" id="unpublish-btn" hidden><?= icon('x') ?> Take offline</a>
         </div>

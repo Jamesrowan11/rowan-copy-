@@ -189,6 +189,13 @@ switch ($_POST['action'] ?? '') {
         json_out(['ok' => true, 'url' => base_url('editor.php?id=' . $newId)]);
 
     case 'delete':
+        if (portal_live($site) && $site['portal_subscription_id'] && stripe_enabled()) {
+            try { // stop billing its Portal, with credit for the unused time
+                stripe()->subscriptions->cancel((string) $site['portal_subscription_id'], ['prorate' => true, 'invoice_now' => true]);
+            } catch (Throwable $e) {
+                error_log('Rowan Copy: cancel portal on site delete: ' . $e->getMessage());
+            }
+        }
         remove_site_hosting($site);
         array_map('unlink', glob(uploads_dir($siteId) . '/*') ?: []);
         @rmdir(uploads_dir($siteId));

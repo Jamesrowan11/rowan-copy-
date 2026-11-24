@@ -999,3 +999,15 @@ button.chip { border: 0; font-family: inherit; }
   .tier-pick { grid-template-columns: 1fr; }
   .mailboxes li { flex-wrap: wrap; }
 }
+
+/* Portal add-on (site-portal.php) */
+.portal-pitch h2 { font-size: 1.7rem; margin-top: 10px; max-width: 560px; }
+.portal-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0 6px; }
+.portal-sides > div { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px 4px; }
+.portal-sides h3 { margin: 0 0 6px; font-size: 1.1rem; }
+.portal-status { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.portal-status > div { display: flex; flex-direction: column; min-width: 0; }
+.portal-link { font-size: 1.05rem; overflow-wrap: anywhere; }
+.portal-section-head { margin: 0 0 8px; }
+.portal-section-head h2 { margin: 0; }
+@media (max-width: 760px) { .portal-sides { grid-template-columns: 1fr; } }

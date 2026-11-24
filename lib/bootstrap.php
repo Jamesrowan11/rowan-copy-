@@ -27,6 +27,7 @@ require_once __DIR__ . '/mailer.php';
 require_once __DIR__ . '/zoho.php';
 require_once __DIR__ . '/zohomail.php';
 require_once __DIR__ . '/mailbilling.php';
+require_once __DIR__ . '/clientportal.php';
 require_once RC_ROOT . '/vendor/autoload.php';
 
 function cfg(string $key, mixed $default = null): mixed
@@ -258,6 +259,26 @@ function migrate(PDO $pdo): void
     add_column($pdo, 'users', 'mail_subscription_status', 'TEXT');
     add_column($pdo, 'users', 'mail_billing_from', 'TEXT'); // when billing old accounts starts (UTC)
     $pdo->exec('CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL)');
+    // Portal add-on (lib/clientportal.php): one subscription per website, and the
+    // staff and clients who can sign in to that website's portal.
+    add_column($pdo, 'sites', 'portal_subscription_id', 'TEXT');
+    add_column($pdo, 'sites', 'portal_status', 'TEXT');
+    add_column($pdo, 'sites', 'portal_cancels', 'INTEGER NOT NULL DEFAULT 0');
+    add_column($pdo, 'sites', 'portal_renews_at', 'TEXT');
+    $pdo->exec("CREATE TABLE IF NOT EXISTS portal_users (
+        id INTEGER PRIMARY KEY,
+        site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+        role TEXT NOT NULL,                 -- staff | client
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        password_hash TEXT,                 -- null until they accept the invite
+        token_hash TEXT, token_kind TEXT, token_expires TEXT,  -- invite or password reset link
+        session_version INTEGER NOT NULL DEFAULT 1,
+        disabled INTEGER NOT NULL DEFAULT 0,
+        last_login_at TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (site_id, email)
+    )");
 }
 
 /** Add a column if it doesn't exist yet. Returns true when it was added. */
@@ -695,6 +716,11 @@ function build_site_page(array $site, bool $static): string
         $extra .= '<a href="' . h(base_url()) . '" target="_blank" rel="noopener" style="position:fixed;right:12px;bottom:12px;z-index:2147483647;'
             . 'background:#14233f;color:#fff;font:600 12px/1 system-ui,sans-serif;padding:8px 12px;border-radius:999px;text-decoration:none;'
             . 'box-shadow:0 2px 8px rgba(0,0,0,.2)">Made with Rowan Copy</a>';
+    }
+    if (portal_live($site)) {
+        $extra .= '<a href="' . h(portal_url($site)) . '" style="position:fixed;left:12px;bottom:12px;z-index:2147483647;'
+            . 'background:#fff;color:#14233f;font:600 13px/1 system-ui,sans-serif;padding:9px 14px;border-radius:999px;text-decoration:none;'
+            . 'border:1px solid rgba(20,35,63,.15);box-shadow:0 2px 8px rgba(0,0,0,.15)">&#128274; Portal sign in</a>';
     }
     if ($static) {
         $extra .= '<img src="' . h(base_url('v.php?s=' . rawurlencode((string) $site['slug']))) . '" alt="" width="1" height="1" '
